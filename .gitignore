@@ -31,8 +31,8 @@ bin/
 ### Node (Bufab WAF MCP proxy) ###
 bufab-waf-mcp-proxy/node_modules/
 bufab-waf-mcp-proxy/dist/
-bufab-waf-mcp-proxy/.lancedb/
-bufab-waf-mcp-proxy/.lancedb-ui/
+#bufab-waf-mcp-proxy/.lancedb/
+#bufab-waf-mcp-proxy/.lancedb-ui/
 
 ### Mac OS ###
 .DS_Store
