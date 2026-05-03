@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "bufab-waf-mcp-proxy": {
+      "command": "node",
+      "args": ["${workspaceFolder}/bufab-waf-mcp-proxy/dist/index.js"]
+    }
+  }
+}
