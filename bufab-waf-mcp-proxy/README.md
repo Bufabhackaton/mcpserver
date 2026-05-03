@@ -2,9 +2,9 @@
 
 MCP (Model Context Protocol) server that exposes:
 
-1. **`bufab_waf_guidelines`** — Azure Well-Architected Framework guidance via the official [`@azure/mcp`](https://www.npmjs.com/package/@azure/mcp) child process, plus a static Bufab overlay from `data/bufab-infrastructure-appendix.md` when present.
-2. **Infrastructure rules** — LanceDB-backed CRUD and semantic search (`bufab_rules_*`).
-3. **UI guidelines** — LanceDB-backed fragments seeded from `bufab_ui_guidelines.json`, with helpers for sections, tokens, and export (`bufab_ui_*`, `get_section_spec`, `get_token`, `bufab_ui_export`).
+1. **`waf_guidelines`** — Azure Well-Architected Framework guidance via the official [`@azure/mcp`](https://www.npmjs.com/package/@azure/mcp) child process, plus a static Bufab overlay from `data/bufab-infrastructure-appendix.md` when present.
+2. **Infrastructure rules** — LanceDB-backed CRUD and semantic search (`rules_*`).
+3. **UI guidelines** — LanceDB-backed fragments seeded from `bufab_ui_guidelines.json`, with helpers for sections, tokens, and export (`ui_*`, `get_section_spec`, `get_token`, `ui_export`, `ui_export_markdown`).
 
 Transport: **stdio** (standard MCP over stdin/stdout).
 
@@ -12,7 +12,7 @@ Transport: **stdio** (standard MCP over stdin/stdout).
 
 - **Node.js 18+**
 - **Network** on first embedding use: the default embedding model (`Xenova/all-MiniLM-L6-v2`) is downloaded and cached (typically under `node_modules/@huggingface/transformers/.cache/`).
-- For **`bufab_waf_guidelines`**: **`npx`** must work on the host; the server runs `npx` against `@azure/mcp` (overridable; see environment variables). Configure Azure credentials the same way you would for the Azure MCP CLI.
+- For **`waf_guidelines`**: **`npx`** must work on the host; the server runs `npx` against `@azure/mcp` (overridable; see environment variables). Configure Azure credentials the same way you would for the Azure MCP CLI.
 
 ## Install and build
 
@@ -84,20 +84,21 @@ Use `command`: `node`, `args`: `["/absolute/path/to/bufab-waf-mcp-proxy/dist/ind
 
 | Name | Purpose |
 |------|---------|
-| `bufab_waf_guidelines` | Azure WAF service guidance (optional `service`), plus Bufab appendix when `data/bufab-infrastructure-appendix.md` exists. |
-| `bufab_rules_upsert` | Create or update an infrastructure rule and embeddings. |
-| `bufab_rules_get` | Load a rule by `slug` or `rule_id`. |
-| `bufab_rules_list` | List rules, optional `status` filter. |
-| `bufab_rules_search` | Semantic search over rule chunks. |
-| `bufab_rules_delete` | Delete a rule and related data. |
-| `bufab_ui_list` | List UI guideline entities. |
-| `bufab_ui_get` | Load one UI entity by `slug` or `entity_id`. |
-| `bufab_ui_upsert` | Create or update a UI fragment and embeddings. |
-| `bufab_ui_delete` | Delete a UI entity and related data. |
-| `bufab_ui_search` | Semantic search over UI guideline chunks. |
+| `waf_guidelines` | Azure WAF service guidance (optional `service`), plus Bufab appendix when `data/bufab-infrastructure-appendix.md` exists. |
+| `rules_upsert` | Create or update an infrastructure rule and embeddings. |
+| `rules_get` | Load a rule by `slug` or `rule_id`. |
+| `rules_list` | List rules, optional `status` filter. |
+| `rules_search` | Semantic search over rule chunks. |
+| `rules_delete` | Delete a rule and related data. |
+| `ui_list` | List UI guideline entities. |
+| `ui_get` | Load one UI entity by `slug` or `entity_id`. |
+| `ui_upsert` | Create or update a UI fragment and embeddings. |
+| `ui_delete` | Delete a UI entity and related data. |
+| `ui_search` | Semantic search over UI guideline chunks. |
 | `get_section_spec` | JSON spec for a section/layout key (`section_type`). |
 | `get_token` | Design token or dotted path (`name`). |
-| `bufab_ui_export` | Merged export shaped like `bufab_ui_guidelines.json`. |
+| `ui_export` | Merged export shaped like `bufab_ui_guidelines.json`. |
+| `ui_export_markdown` | Human-readable markdown export of current UI fragments. |
 
 ## Verify
 
@@ -118,7 +119,7 @@ npm run verify:ui
 ## Troubleshooting
 
 - **Slow first request**: embedding model download or LanceDB initialization.
-- **`bufab_waf_guidelines` errors**: confirm `npx -y @azure/mcp@latest server start --transport stdio …` works locally and Azure auth is valid.
+- **`waf_guidelines` errors**: confirm `npx -y @azure/mcp@latest server start --transport stdio …` works locally and Azure auth is valid.
 - **Missing UI data**: ensure `BUFAB_UI_GUIDELINES_JSON` points at the correct file, or set `BUFAB_UI_FORCE_RESEED=1` once after changing the JSON path.
 
 ## License

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "MCP server: Azure WAF (bufab_waf_guidelines), infrastructure rules (bufab_rules_* / BUFAB_RULES_DB_PATH), UI guidelines fragments (bufab_ui_* / get_section_spec / get_token / bufab_ui_export / BUFAB_UI_DB_PATH, BUFAB_UI_GUIDELINES_JSON, BUFAB_UI_FORCE_RESEED). Env: BUFAB_EMBEDDING_MODEL, BUFAB_UI_EMBEDDING_MODEL.",
+  "description": "MCP server: Azure WAF (waf_guidelines), infrastructure rules (rules_* / BUFAB_RULES_DB_PATH), UI guidelines fragments (ui_* / get_section_spec / get_token / ui_export / ui_export_markdown / BUFAB_UI_DB_PATH, BUFAB_UI_GUIDELINES_JSON, BUFAB_UI_FORCE_RESEED). Env: BUFAB_EMBEDDING_MODEL, BUFAB_UI_EMBEDDING_MODEL.",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",

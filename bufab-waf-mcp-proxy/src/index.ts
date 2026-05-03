@@ -11,7 +11,7 @@ import { RulesStore } from "./rulesStore.js";
 import { UiGuidelinesStore } from "./uiGuidelinesStore.js";
 
 const AZURE_WAF_TOOL = "wellarchitectedframework_serviceguide_get";
-const BUFAB_TOOL = "bufab_waf_guidelines";
+const WAF_GUIDELINES_TOOL = "waf_guidelines";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -111,12 +111,12 @@ const server = new McpServer(
   },
   {
     instructions:
-      "Tools: (1) bufab_waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) bufab_rules_* — infrastructure rules in LanceDB (.lancedb). (3) bufab_ui_* / get_section_spec / get_token / bufab_ui_export / bufab_ui_export_markdown — UI guidelines fragments in LanceDB (.lancedb-ui), seeded from bufab_ui_guidelines.json. Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_GUIDELINES_JSON, BUFAB_UI_FORCE_RESEED=1 to re-import JSON. First embedding use downloads MiniLM via @huggingface/transformers.",
+      "Tools: (1) waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) rules_* — infrastructure rules in LanceDB (.lancedb). (3) ui_* / get_section_spec / get_token / ui_export / ui_export_markdown — UI guidelines fragments in LanceDB (.lancedb-ui), seeded from bufab_ui_guidelines.json. Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_GUIDELINES_JSON, BUFAB_UI_FORCE_RESEED=1 to re-import JSON. First embedding use downloads MiniLM via @huggingface/transformers.",
   },
 );
 
 server.registerTool(
-  BUFAB_TOOL,
+  WAF_GUIDELINES_TOOL,
   {
     title: "Bufab WAF guidelines",
     description:
@@ -170,7 +170,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "bufab_rules_upsert",
+  "rules_upsert",
   {
     title: "Upsert Bufab rule",
     description:
@@ -213,7 +213,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "bufab_rules_get",
+  "rules_get",
   {
     title: "Get Bufab rule",
     description: "Load a rule by slug or rule_id. Optionally include full version history.",
@@ -249,7 +249,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "bufab_rules_list",
+  "rules_list",
   {
     title: "List Bufab rules",
     description: "List rules with optional status filter.",
@@ -265,7 +265,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "bufab_rules_search",
+  "rules_search",
   {
     title: "Semantic search Bufab rules",
     description:
@@ -299,7 +299,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "bufab_rules_delete",
+  "rules_delete",
   {
     title: "Delete Bufab rule",
     description: "Deletes a rule and all versions and chunks from LanceDB.",
@@ -322,7 +322,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "bufab_ui_list",
+  "ui_list",
   {
     title: "List UI guideline entities",
     description:
@@ -350,7 +350,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "bufab_ui_get",
+  "ui_get",
   {
     title: "Get UI guideline fragment",
     description: "Load one UI entity by slug or entity_id. Returns current version body (JSON string) unless include_history is true.",
@@ -383,7 +383,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "bufab_ui_upsert",
+  "ui_upsert",
   {
     title: "Upsert UI guideline fragment",
     description:
@@ -421,7 +421,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "bufab_ui_delete",
+  "ui_delete",
   {
     title: "Delete UI guideline entity",
     description: "Deletes a UI entity and all versions and chunks.",
@@ -446,7 +446,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "bufab_ui_search",
+  "ui_search",
   {
     title: "Semantic search UI guidelines",
     description: "Vector search over chunked UI guideline bodies (MiniLM). Optional current_only (default true).",
@@ -464,7 +464,7 @@ server.registerTool(
           {
             type: "text",
             text:
-              "Missing required argument `query` (string) for `bufab_ui_search`.\n" +
+              "Missing required argument `query` (string) for `ui_search`.\n" +
               "Example:\n" +
               "{\n" +
               '  "query": "hero section CTA rules",\n' +
@@ -543,7 +543,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "bufab_ui_export",
+  "ui_export",
   {
     title: "Export merged UI guidelines JSON",
     description:
@@ -563,7 +563,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "bufab_ui_export_markdown",
+  "ui_export_markdown",
   {
     title: "Export UI guidelines as markdown",
     description:
