@@ -1,0 +1,28 @@
+{
+  "name": "bufab-waf-mcp-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server: Azure WAF proxy (bufab_waf_guidelines) plus Bufab rules storage (LanceDB: rules + versions + embedding chunks via bufab_rules_* tools). Env: BUFAB_RULES_DB_PATH, BUFAB_EMBEDDING_MODEL.",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "verify": "node scripts/mcp-smoke.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "@lancedb/lancedb": "^0.27.2",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "apache-arrow": "^18.1.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

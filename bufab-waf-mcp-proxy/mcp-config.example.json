@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "bufab-waf": {
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/Guidlines/bufab-waf-mcp-proxy/dist/index.js"],
+      "env": {
+        "BUFAB_RULES_DB_PATH": "/ABSOLUTE/PATH/TO/your-rules.lancedb"
+      }
+    }
+  }
+}
