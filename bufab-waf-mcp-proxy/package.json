@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "MCP server: Azure WAF proxy (bufab_waf_guidelines) plus Bufab rules storage (LanceDB: rules + versions + embedding chunks via bufab_rules_* tools). Env: BUFAB_RULES_DB_PATH, BUFAB_EMBEDDING_MODEL.",
+  "description": "MCP server: Azure WAF (bufab_waf_guidelines), infrastructure rules (bufab_rules_* / BUFAB_RULES_DB_PATH), UI guidelines fragments (bufab_ui_* / get_section_spec / get_token / bufab_ui_export / BUFAB_UI_DB_PATH, BUFAB_UI_GUIDELINES_JSON, BUFAB_UI_FORCE_RESEED). Env: BUFAB_EMBEDDING_MODEL, BUFAB_UI_EMBEDDING_MODEL.",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "verify": "node scripts/mcp-smoke.mjs"
+    "verify": "node scripts/mcp-smoke.mjs",
+    "verify:ui": "node scripts/ui-seed-verify.mjs"
   },
   "engines": {
     "node": ">=18"

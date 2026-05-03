@@ -8,6 +8,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { RulesStore } from "./rulesStore.js";
+import { UiGuidelinesStore } from "./uiGuidelinesStore.js";
 
 const AZURE_WAF_TOOL = "wellarchitectedframework_serviceguide_get";
 const BUFAB_TOOL = "bufab_waf_guidelines";
@@ -18,6 +19,12 @@ let rulesStorePromise: Promise<RulesStore> | null = null;
 function getRulesStore(): Promise<RulesStore> {
   rulesStorePromise ??= RulesStore.open(__dirname);
   return rulesStorePromise;
+}
+
+let uiStorePromise: Promise<UiGuidelinesStore> | null = null;
+function getUiGuidelinesStore(): Promise<UiGuidelinesStore> {
+  uiStorePromise ??= UiGuidelinesStore.open(__dirname);
+  return uiStorePromise;
 }
 
 function jsonText(data: unknown): string {
@@ -104,7 +111,7 @@ const server = new McpServer(
   },
   {
     instructions:
-      "Tools: (1) bufab_waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) bufab_rules_* — Bufab rules in a local LanceDB (Option C: rules + rule_versions + vector chunks). Set BUFAB_RULES_DB_PATH to override the database directory. First embedding use downloads the Xenova MiniLM model via @huggingface/transformers.",
+      "Tools: (1) bufab_waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) bufab_rules_* — infrastructure rules in LanceDB (.lancedb). (3) bufab_ui_* / get_section_spec / get_token / bufab_ui_export — UI guidelines fragments in LanceDB (.lancedb-ui), seeded from bufab_ui_guidelines.json. Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_GUIDELINES_JSON, BUFAB_UI_FORCE_RESEED=1 to re-import JSON. First embedding use downloads MiniLM via @huggingface/transformers.",
   },
 );
 
@@ -311,6 +318,229 @@ server.registerTool(
     const store = await getRulesStore();
     const ok = await store.deleteRule({ slug: args.slug, rule_id: args.rule_id });
     return { content: [{ type: "text", text: ok ? jsonText({ deleted: true }) : "(not found)" }] };
+  },
+);
+
+server.registerTool(
+  "bufab_ui_list",
+  {
+    title: "List UI guideline entities",
+    description:
+      "Lists Bufab UI guideline fragments stored in LanceDB (slug, kind, domain, status). Optional filters: status, domain, kind.",
+    inputSchema: {
+      status: z.string().optional().describe("Filter by ui_entities.status."),
+      domain: z.string().optional().describe("Filter by ui_entities.domain (meta, layout, component, section, tokens, policy, content)."),
+      kind: z.string().optional().describe("Filter by ui_entities.kind (e.g. json_fragment)."),
+    },
+  },
+  async (args) => {
+    try {
+      const store = await getUiGuidelinesStore();
+      const rows = await store.listEntities({
+        status: args.status,
+        domain: args.domain,
+        kind: args.kind,
+      });
+      return { content: [{ type: "text", text: jsonText(rows) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    }
+  },
+);
+
+server.registerTool(
+  "bufab_ui_get",
+  {
+    title: "Get UI guideline fragment",
+    description: "Load one UI entity by slug or entity_id. Returns current version body (JSON string) unless include_history is true.",
+    inputSchema: {
+      slug: z.string().optional(),
+      entity_id: z.string().uuid().optional(),
+      include_history: z.boolean().optional().describe("Include all versions (newest first). Default false."),
+    },
+  },
+  async (args) => {
+    if (!args.slug?.trim() && !args.entity_id?.trim()) {
+      return { isError: true, content: [{ type: "text", text: "Provide slug or entity_id." }] };
+    }
+    try {
+      const store = await getUiGuidelinesStore();
+      const row = await store.getEntity({
+        slug: args.slug,
+        entity_id: args.entity_id,
+        include_history: args.include_history ?? false,
+      });
+      if (!row) {
+        return { content: [{ type: "text", text: "(not found)" }] };
+      }
+      return { content: [{ type: "text", text: jsonText(row) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    }
+  },
+);
+
+server.registerTool(
+  "bufab_ui_upsert",
+  {
+    title: "Upsert UI guideline fragment",
+    description:
+      "Creates or updates a UI guideline entity. If body is omitted, updates title/status/kind/domain only. If body is set, appends a new version and re-embeds search chunks.",
+    inputSchema: {
+      slug: z.string().describe("Stable slug, e.g. section-hero, tokens-colors."),
+      title: z.string().describe("Human title."),
+      body: z.string().optional().describe("Fragment JSON or markdown. Required for new entities."),
+      kind: z.string().optional().describe("Default json_fragment."),
+      domain: z.string().optional().describe("Default general."),
+      change_summary: z.string().optional(),
+      status: z.string().optional().describe("Default active."),
+      entity_id: z.string().uuid().optional(),
+    },
+  },
+  async (args) => {
+    try {
+      const store = await getUiGuidelinesStore();
+      const out = await store.upsertEntity({
+        slug: args.slug,
+        title: args.title,
+        body: args.body,
+        kind: args.kind,
+        domain: args.domain,
+        change_summary: args.change_summary,
+        status: args.status,
+        entity_id: args.entity_id,
+      });
+      return { content: [{ type: "text", text: jsonText(out) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    }
+  },
+);
+
+server.registerTool(
+  "bufab_ui_delete",
+  {
+    title: "Delete UI guideline entity",
+    description: "Deletes a UI entity and all versions and chunks.",
+    inputSchema: {
+      slug: z.string().optional(),
+      entity_id: z.string().uuid().optional(),
+    },
+  },
+  async (args) => {
+    if (!args.slug?.trim() && !args.entity_id?.trim()) {
+      return { isError: true, content: [{ type: "text", text: "Provide slug or entity_id." }] };
+    }
+    try {
+      const store = await getUiGuidelinesStore();
+      const ok = await store.deleteEntity({ slug: args.slug, entity_id: args.entity_id });
+      return { content: [{ type: "text", text: ok ? jsonText({ deleted: true }) : "(not found)" }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    }
+  },
+);
+
+server.registerTool(
+  "bufab_ui_search",
+  {
+    title: "Semantic search UI guidelines",
+    description: "Vector search over chunked UI guideline bodies (MiniLM). Optional current_only (default true).",
+    inputSchema: {
+      query: z.string().describe("Natural-language query."),
+      limit: z.number().int().min(1).max(50).optional(),
+      current_only: z.boolean().optional(),
+    },
+  },
+  async (args) => {
+    try {
+      const store = await getUiGuidelinesStore();
+      const hits = await store.searchUi({
+        query: args.query,
+        limit: args.limit,
+        current_only: args.current_only,
+      });
+      return { content: [{ type: "text", text: jsonText(hits) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    }
+  },
+);
+
+server.registerTool(
+  "get_section_spec",
+  {
+    title: "Get UI section spec",
+    description:
+      "Returns the JSON spec for a section or layout key (e.g. hero, header, text-image-split, layout). Maps to Lance slug section-* or component-*.",
+    inputSchema: {
+      section_type: z
+        .string()
+        .describe("Section or component key: layout, header, footer, hero, text-image-split, value-columns, …"),
+    },
+  },
+  async ({ section_type }) => {
+    try {
+      const store = await getUiGuidelinesStore();
+      const spec = await store.getSectionSpec(section_type);
+      if (spec === null) {
+        return { content: [{ type: "text", text: "(not found)" }] };
+      }
+      return { content: [{ type: "text", text: jsonText(spec) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    }
+  },
+);
+
+server.registerTool(
+  "get_token",
+  {
+    title: "Get UI design token",
+    description:
+      "Returns a token or subtree from tokens-* fragments. Examples: primary, colors.primary, typography.scale.h1, spacing.section_vertical_padding.",
+    inputSchema: {
+      name: z.string().describe("Token name or dotted path."),
+    },
+  },
+  async ({ name }) => {
+    try {
+      const store = await getUiGuidelinesStore();
+      const tok = await store.getToken(name);
+      if (tok === null) {
+        return { content: [{ type: "text", text: "(not found)" }] };
+      }
+      return { content: [{ type: "text", text: jsonText(tok) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    }
+  },
+);
+
+server.registerTool(
+  "bufab_ui_export",
+  {
+    title: "Export merged UI guidelines JSON",
+    description:
+      "Rebuilds a bufab_ui_guidelines.json-shaped object from all current UI fragments in LanceDB (meta + ui_rules).",
+    inputSchema: z.object({}),
+  },
+  async () => {
+    try {
+      const store = await getUiGuidelinesStore();
+      const doc = await store.exportMergedGuidelines();
+      return { content: [{ type: "text", text: jsonText(doc) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    }
   },
 );
 
