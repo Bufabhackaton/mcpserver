@@ -111,7 +111,7 @@ const server = new McpServer(
   },
   {
     instructions:
-      "Tools: (1) waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) rules_* — infrastructure rules in LanceDB (.lancedb). (3) ui_* / get_section_spec / get_token / ui_export / ui_export_markdown — UI guidelines fragments in LanceDB (.lancedb-ui), seeded from bufab_ui_guidelines.json. Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_GUIDELINES_JSON, BUFAB_UI_FORCE_RESEED=1 to re-import JSON. First embedding use downloads MiniLM via @huggingface/transformers.",
+      "Tools: (1) waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) rules_* — infrastructure rules in LanceDB (.lancedb). (3) ui_* (including ui_section_spec, ui_token, ui_export, ui_export_markdown) — UI guidelines fragments in LanceDB (.lancedb-ui), seeded from bufab_ui_guidelines.json. Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_GUIDELINES_JSON, BUFAB_UI_FORCE_RESEED=1 to re-import JSON. First embedding use downloads MiniLM via @huggingface/transformers.",
   },
 );
 
@@ -491,7 +491,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "get_section_spec",
+  "ui_section_spec",
   {
     title: "Get UI section spec",
     description:
@@ -518,7 +518,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "get_token",
+  "ui_token",
   {
     title: "Get UI design token",
     description:

@@ -4,7 +4,7 @@ MCP (Model Context Protocol) server that exposes:
 
 1. **`waf_guidelines`** — Azure Well-Architected Framework guidance via the official [`@azure/mcp`](https://www.npmjs.com/package/@azure/mcp) child process, plus a static Bufab overlay from `data/bufab-infrastructure-appendix.md` when present.
 2. **Infrastructure rules** — LanceDB-backed CRUD and semantic search (`rules_*`).
-3. **UI guidelines** — LanceDB-backed fragments seeded from `bufab_ui_guidelines.json`, with helpers for sections, tokens, and export (`ui_*`, `get_section_spec`, `get_token`, `ui_export`, `ui_export_markdown`).
+3. **UI guidelines** — LanceDB-backed fragments seeded from `bufab_ui_guidelines.json`, with helpers for sections, tokens, and export (`ui_*`, including `ui_section_spec`, `ui_token`, `ui_export`, `ui_export_markdown`).
 
 Transport: **stdio** (standard MCP over stdin/stdout).
 
@@ -95,8 +95,8 @@ Use `command`: `node`, `args`: `["/absolute/path/to/bufab-waf-mcp-proxy/dist/ind
 | `ui_upsert` | Create or update a UI fragment and embeddings. |
 | `ui_delete` | Delete a UI entity and related data. |
 | `ui_search` | Semantic search over UI guideline chunks. |
-| `get_section_spec` | JSON spec for a section/layout key (`section_type`). |
-| `get_token` | Design token or dotted path (`name`). |
+| `ui_section_spec` | JSON spec for a section/layout key (`section_type`). |
+| `ui_token` | Design token or dotted path (`name`). |
 | `ui_export` | Merged export shaped like `bufab_ui_guidelines.json`. |
 | `ui_export_markdown` | Human-readable markdown export of current UI fragments. |
 
