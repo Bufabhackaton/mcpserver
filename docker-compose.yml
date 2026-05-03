@@ -1,0 +1,22 @@
+# Lance Data Viewer — https://github.com/lance-format/lance-data-viewer
+#
+# 1. Data defaults to ./bufab-waf-mcp-proxy/.lancedb-ui (override with LANCE_DATA_DIR in .env).
+# 2. If the viewer cannot see files: chmod -R o+rx <your-lance-dir>
+# 3. Run: docker compose up
+# 4. UI: http://localhost:${LANCE_VIEWER_PORT:-8080}
+#
+# Other Lance format versions use a different image tag, for example:
+#   image: ghcr.io/lance-format/lance-data-viewer:lancedb-0.24.3
+
+services:
+  lance-viewer:
+    image: ghcr.io/lance-format/lance-data-viewer:lancedb-0.29.2
+    container_name: lance-data-viewer
+    ports:
+      - "${LANCE_VIEWER_PORT:-8080}:8080"
+    environment:
+      DATA_PATH: /data
+      PORT: "8080"
+    volumes:
+      - ${LANCE_DATA_DIR:-./bufab-waf-mcp-proxy/.lancedb-ui}:/data:ro
+    restart: unless-stopped
