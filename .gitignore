@@ -28,11 +28,11 @@ bin/
 ### VS Code ###
 .vscode/
 
-### Node (Bufab WAF MCP proxy) ###
-bufab-waf-mcp-proxy/node_modules/
-bufab-waf-mcp-proxy/dist/
-#bufab-waf-mcp-proxy/.lancedb/
-#bufab-waf-mcp-proxy/.lancedb-ui/
+### Node (Bufab MCP) ###
+bufab-mcp/node_modules/
+bufab-mcp/dist/
+#bufab-mcp/.lancedb/
+#bufab-mcp/.lancedb-ui/
 
 ### Mac OS ###
 .DS_Store

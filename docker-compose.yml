@@ -1,6 +1,6 @@
 # Lance Data Viewer — https://github.com/lance-format/lance-data-viewer
 #
-# 1. Data defaults to ./bufab-waf-mcp-proxy/.lancedb-ui (override with LANCE_DATA_DIR in .env).
+# 1. Data defaults to ./bufab-mcp/.lancedb-ui (override with LANCE_DATA_DIR in .env).
 # 2. If the viewer cannot see files: chmod -R o+rx <your-lance-dir>
 # 3. Run: docker compose up
 # 4. UI: http://localhost:${LANCE_VIEWER_PORT:-8080}
@@ -18,5 +18,5 @@ services:
       DATA_PATH: /data
       PORT: "8080"
     volumes:
-      - ${LANCE_DATA_DIR:-./bufab-waf-mcp-proxy/.lancedb-ui}:/data:ro
+      - ${LANCE_DATA_DIR:-./bufab-mcp/.lancedb-ui}:/data:ro
     restart: unless-stopped
