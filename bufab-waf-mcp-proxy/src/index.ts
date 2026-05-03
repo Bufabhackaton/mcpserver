@@ -111,7 +111,7 @@ const server = new McpServer(
   },
   {
     instructions:
-      "Tools: (1) bufab_waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) bufab_rules_* — infrastructure rules in LanceDB (.lancedb). (3) bufab_ui_* / get_section_spec / get_token / bufab_ui_export — UI guidelines fragments in LanceDB (.lancedb-ui), seeded from bufab_ui_guidelines.json. Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_GUIDELINES_JSON, BUFAB_UI_FORCE_RESEED=1 to re-import JSON. First embedding use downloads MiniLM via @huggingface/transformers.",
+      "Tools: (1) bufab_waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) bufab_rules_* — infrastructure rules in LanceDB (.lancedb). (3) bufab_ui_* / get_section_spec / get_token / bufab_ui_export / bufab_ui_export_markdown — UI guidelines fragments in LanceDB (.lancedb-ui), seeded from bufab_ui_guidelines.json. Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_GUIDELINES_JSON, BUFAB_UI_FORCE_RESEED=1 to re-import JSON. First embedding use downloads MiniLM via @huggingface/transformers.",
   },
 );
 
@@ -451,12 +451,30 @@ server.registerTool(
     title: "Semantic search UI guidelines",
     description: "Vector search over chunked UI guideline bodies (MiniLM). Optional current_only (default true).",
     inputSchema: {
-      query: z.string().describe("Natural-language query."),
+      query: z.string().optional().describe("Natural-language query."),
       limit: z.number().int().min(1).max(50).optional(),
       current_only: z.boolean().optional(),
     },
   },
   async (args) => {
+    if (!args.query || !args.query.trim()) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text:
+              "Missing required argument `query` (string) for `bufab_ui_search`.\n" +
+              "Example:\n" +
+              "{\n" +
+              '  "query": "hero section CTA rules",\n' +
+              '  "limit": 8,\n' +
+              '  "current_only": true\n' +
+              "}",
+          },
+        ],
+      };
+    }
     try {
       const store = await getUiGuidelinesStore();
       const hits = await store.searchUi({
@@ -537,6 +555,26 @@ server.registerTool(
       const store = await getUiGuidelinesStore();
       const doc = await store.exportMergedGuidelines();
       return { content: [{ type: "text", text: jsonText(doc) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    }
+  },
+);
+
+server.registerTool(
+  "bufab_ui_export_markdown",
+  {
+    title: "Export UI guidelines as markdown",
+    description:
+      "Renders a human-readable markdown document from current UI fragments in LanceDB.",
+    inputSchema: z.object({}),
+  },
+  async () => {
+    try {
+      const store = await getUiGuidelinesStore();
+      const md = await store.exportMarkdownGuidelines();
+      return { content: [{ type: "text", text: md }] };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       return { isError: true, content: [{ type: "text", text: message }] };

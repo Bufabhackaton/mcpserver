@@ -352,6 +352,34 @@ function getNested(obj: unknown, path: string[]): unknown {
   return cur;
 }
 
+function titleFromSlug(slug: string): string {
+  return slug
+    .replace(/^section-/, "")
+    .replace(/^component-/, "")
+    .replace(/^tokens-/, "")
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function renderMarkdownValue(value: unknown, indent = ""): string[] {
+  if (Array.isArray(value)) {
+    return value.map((v) => `${indent}- ${typeof v === "string" ? v : JSON.stringify(v)}`);
+  }
+  if (value && typeof value === "object") {
+    const out: string[] = [];
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v && typeof v === "object") {
+        out.push(`${indent}- **${k}**:`);
+        out.push(...renderMarkdownValue(v, `${indent}  `));
+      } else {
+        out.push(`${indent}- **${k}**: ${String(v)}`);
+      }
+    }
+    return out;
+  }
+  return [`${indent}- ${String(value)}`];
+}
+
 export class UiGuidelinesStore {
   private readonly conn: Connection;
 
@@ -846,5 +874,87 @@ export class UiGuidelinesStore {
       out.ui_rules = ui_rules;
     }
     return out;
+  }
+
+  async exportMarkdownGuidelines(): Promise<string> {
+    const doc = await this.exportMergedGuidelines();
+    const lines: string[] = [];
+    lines.push("# Bufab UI Guidelines (from LanceDB)");
+    lines.push("");
+
+    const meta = doc.meta as Record<string, unknown> | undefined;
+    if (meta) {
+      lines.push("## Meta");
+      lines.push(...renderMarkdownValue(meta));
+      lines.push("");
+    }
+
+    const ui = doc.ui_rules as Record<string, unknown> | undefined;
+    if (!ui) {
+      return lines.join("\n").trim();
+    }
+
+    if (ui.layout !== undefined) {
+      lines.push("## Layout");
+      lines.push(...renderMarkdownValue(ui.layout));
+      lines.push("");
+    }
+
+    const components = ui.components as Record<string, unknown> | undefined;
+    if (components) {
+      lines.push("## Components");
+      const preferredOrder = [
+        "header",
+        "hero",
+        "sections",
+        "footer",
+      ];
+      const keys = [
+        ...preferredOrder.filter((k) => Object.prototype.hasOwnProperty.call(components, k)),
+        ...Object.keys(components).filter((k) => !preferredOrder.includes(k)),
+      ];
+      for (const key of keys) {
+        if (key === "sections") {
+          const sec = components.sections as Record<string, unknown> | undefined;
+          const types = sec?.types as Record<string, unknown> | undefined;
+          if (!types) {
+            continue;
+          }
+          lines.push("### Section Types");
+          for (const [sectionType, spec] of Object.entries(types)) {
+            lines.push(`#### ${titleFromSlug(sectionType)}`);
+            lines.push(...renderMarkdownValue(spec));
+            lines.push("");
+          }
+          continue;
+        }
+        lines.push(`### ${titleFromSlug(key)}`);
+        lines.push(...renderMarkdownValue(components[key]));
+        lines.push("");
+      }
+    }
+
+    if (ui.style !== undefined) {
+      lines.push("## Style");
+      lines.push(...renderMarkdownValue(ui.style));
+      lines.push("");
+    }
+    if (ui.imagery !== undefined) {
+      lines.push("## Imagery");
+      lines.push(...renderMarkdownValue(ui.imagery));
+      lines.push("");
+    }
+    if (ui.strict_constraints !== undefined) {
+      lines.push("## Strict Constraints");
+      lines.push(...renderMarkdownValue(ui.strict_constraints));
+      lines.push("");
+    }
+    if (ui.final_check !== undefined) {
+      lines.push("## Final Check");
+      lines.push(...renderMarkdownValue(ui.final_check));
+      lines.push("");
+    }
+
+    return lines.join("\n").trim();
   }
 }
