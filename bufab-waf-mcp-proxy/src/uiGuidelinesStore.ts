@@ -17,6 +17,27 @@ function sqlStr(v: string): string {
   return `'${v.replace(/'/g, "''")}'`;
 }
 
+/** Top-level `notes` from guideline JSON bodies; otherwise null (non-JSON or key absent). */
+function extractNotesFromBody(body: string | undefined): unknown | null {
+  if (!body?.trim()) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      Object.prototype.hasOwnProperty.call(parsed, "notes")
+    ) {
+      return (parsed as Record<string, unknown>).notes ?? null;
+    }
+  } catch {
+    /* not JSON */
+  }
+  return null;
+}
+
 function packageRootDir(fromDir: string): string {
   return join(fromDir, "..");
 }
@@ -457,6 +478,7 @@ export class UiGuidelinesStore {
 
   async listEntities(filters?: { status?: string; domain?: string; kind?: string }): Promise<unknown[]> {
     const t = await this.conn.openTable(T_ENTITIES);
+    const versions = await this.conn.openTable(T_VERSIONS);
     const parts: string[] = [];
     if (filters?.status?.trim()) {
       parts.push(`status = ${sqlStr(filters.status.trim())}`);
@@ -471,7 +493,19 @@ export class UiGuidelinesStore {
     if (parts.length) {
       q = q.where(parts.join(" AND "));
     }
-    return q.toArray();
+    const entities = await q.toArray();
+    const currentBodies = await versions.query().where("is_current = true").toArray();
+    const bodyByEntityId = new Map<string, string>();
+    for (const row of currentBodies) {
+      const r = row as { entity_id: string; body: string };
+      bodyByEntityId.set(r.entity_id, r.body);
+    }
+    return entities.map((row) => {
+      const ent = row as { id: string };
+      const body = bodyByEntityId.get(ent.id);
+      const notes = extractNotesFromBody(body);
+      return { ...ent, notes };
+    });
   }
 
   async getEntity(options: {

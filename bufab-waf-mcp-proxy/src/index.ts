@@ -326,7 +326,7 @@ server.registerTool(
   {
     title: "List UI guideline entities",
     description:
-      "Lists Bufab UI guideline fragments stored in LanceDB (slug, kind, domain, status). Optional filters: status, domain, kind.",
+      "Lists Bufab UI guideline fragments stored in LanceDB (slug, kind, domain, status). Each row includes `notes`: the top-level `notes` field from the current version body JSON when present (otherwise null). Optional filters: status, domain, kind.",
     inputSchema: {
       status: z.string().optional().describe("Filter by ui_entities.status."),
       domain: z.string().optional().describe("Filter by ui_entities.domain (meta, layout, component, section, tokens, policy, content)."),
