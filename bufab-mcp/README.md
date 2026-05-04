@@ -7,7 +7,7 @@ MCP (Model Context Protocol) server that exposes:
 3. **UI guidelines** — LanceDB-backed fragments seeded from `bufab_ui_guidelines.json`, with helpers for sections, tokens, and export (`ui_*`, including `ui_section_spec`, `ui_token`, `ui_export`, `ui_export_markdown`).
 
 Transport: **stdio** (standard MCP over stdin/stdout).
-
+--
 ## Prerequisites
 
 - **Node.js 18+**
