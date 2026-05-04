@@ -10,6 +10,8 @@ Transport: **stdio** (standard MCP over stdin/stdout).
 --
 ## Prerequisites
 
+
+
 - **Node.js 18+**
 - **Network** on first embedding use: the default embedding model (`Xenova/all-MiniLM-L6-v2`) is downloaded and cached (typically under `node_modules/@huggingface/transformers/.cache/`).
 - For **`waf_guidelines`**: **`npx`** must work on the host; the server runs `npx` against `@azure/mcp` (overridable; see environment variables). Configure Azure credentials the same way you would for the Azure MCP CLI.
