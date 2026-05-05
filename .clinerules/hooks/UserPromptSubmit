@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# UserPromptSubmit Cline hook - macOS/Linux shim.
+# Hands stdin/stdout/stderr to the cross-platform Node implementation in lib/.
+# See ./README.md for the contract and what the hook does.
+set -e
+exec node "$(dirname "$0")/lib/user-prompt-submit.mjs"

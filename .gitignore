@@ -36,3 +36,7 @@ bufab-mcp/dist/
 
 ### Mac OS ###
 .DS_Store
+
+### Bufab hook runtime artifacts ###
+.cursor/.bufab-violations.json
+.claude/settings.local.json
