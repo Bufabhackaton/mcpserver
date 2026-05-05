@@ -40,3 +40,5 @@ bufab-mcp/dist/
 ### Bufab hook runtime artifacts ###
 .cursor/.bufab-violations.json
 .claude/settings.local.json
+
+mcp.json
