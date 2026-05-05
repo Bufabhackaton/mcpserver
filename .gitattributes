@@ -1,0 +1,6 @@
+# Cline hook bash shims and shared Node modules must keep LF line endings.
+# A CRLF-mangled shebang ("#!/usr/bin/env bash\r") fails on macOS/Linux.
+.clinerules/hooks/PostToolUse text eol=lf
+.clinerules/hooks/UserPromptSubmit text eol=lf
+.clinerules/hooks/lib/*.mjs text eol=lf
+bufab-mcp/scripts/*.mjs text eol=lf
