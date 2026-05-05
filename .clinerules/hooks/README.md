@@ -8,13 +8,18 @@
 > relying on the model to remember a system prompt. Hooks are wired up for
 > the three IDE agents we plan to demo: **Cline**, **Cursor**, and
 > **Claude Code**.
+>
+> **All three tools support hooks today.** Cursor added them in 1.7
+> (Oct 2025), Cline in 3.36 (Oct 2025), and Claude Code has had them since
+> launch. Each tool has a slightly different hook schema; this folder ships
+> per-tool adapter scripts that share one validator.
 
-## Why hooks at all (and why this is different from `.cursorrules` / `.clinerules` / `CLAUDE.md`)
+## Why hooks (vs prompt-only `.cursorrules` / `.clinerules` / `CLAUDE.md` rules)
 
-Up to today, the only way to ask an agent to respect the Bufab guidelines was
-to drop them into the system prompt — `.cursorrules` for Cursor, `.clinerules`
-for Cline, `CLAUDE.md` for Claude Code. That's prompt-only enforcement and it
-has two well-known failure modes:
+Every tool already has a *prompt-level* rules file — `.cursorrules` for
+Cursor, `.clinerules` for Cline, `CLAUDE.md` for Claude Code. Those work, but
+they're soft: rules get injected into the system prompt and the LLM is
+expected to follow them. That has two well-known failure modes:
 
 1. **The model forgets.** A long task drifts and rules from the system prompt
    get crowded out by recent tool output.
@@ -86,22 +91,25 @@ Node 18+ is the only runtime requirement.
 
 ## How the three tools differ
 
-The deterministic enforcement is strongest on Cline and Claude Code, weakest
-on Cursor — not because of how we wrote the adapters, but because of what
-each tool's hook surface allows:
+All three tools have hooks, but each hook surface allows different things.
+The matrix below reflects what is **wired up today** in this repo, not the
+theoretical capability of each platform:
 
-| Tool        | Post-write feedback to agent | Block dangerous shell | Prompt-time context injection |
-| ----------- | ---------------------------- | --------------------- | ----------------------------- |
-| **Cline**   | YES (`PostToolUse` `contextModification`) | n/a (no Bash tool yet) | YES (`UserPromptSubmit`) |
-| **Claude Code** | YES (`PostToolUse` `additionalContext`, matcher `Edit\|Write\|MultiEdit`) | YES (`PreToolUse` on `Bash`, not yet implemented) | YES (`UserPromptSubmit`) |
-| **Cursor**  | NO (`afterFileEdit` is informational only — stdout is discarded) | YES (`beforeShellExecution` `permission: "deny"`) | NO (`beforeSubmitPrompt` is informational only) |
+| Tool            | Post-write feedback to the agent                                               | Block a dangerous shell command                                       | Prompt-time context injection                            |
+| --------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------- | -------------------------------------------------------- |
+| **Cline**       | direct — `PostToolUse` returns `contextModification` (next turn sees it)       | possible via `PreToolUse` on `execute_command` (not yet wired)        | direct — `UserPromptSubmit` returns `contextModification` |
+| **Claude Code** | direct — `PostToolUse` (matcher `Edit\|Write\|MultiEdit`) returns `additionalContext` | possible via `PreToolUse` matcher `Bash` (not yet wired)              | direct — `UserPromptSubmit` returns `additionalContext`  |
+| **Cursor**      | indirect — `afterFileEdit` writes a workspace ledger (`afterFileEdit` is informational-only by design) | direct — `beforeShellExecution` returns `permission: "deny"` (wired)  | not wired — `beforeSubmitPrompt` is informational-only   |
 
-For Cursor, since `afterFileEdit` cannot push violations into the agent's
-context directly, we persist them to `<workspace>/.cursor/.bufab-violations.json`
-(a "ledger") and let the `beforeShellExecution` hook deny the next
-`git commit` / `git push` / `npm publish` if the ledger has unresolved
-blockers. That delays enforcement from "in-flight" to "pre-commit", but
-nothing leaves the developer's machine until the violations are fixed.
+Cursor's `afterFileEdit` is "informational-only" in the upstream spec —
+its stdout is discarded, so a script there cannot push the violation
+report straight into the agent's context the way Cline and Claude Code's
+`PostToolUse` can. We work around that by persisting violations to
+`<workspace>/.cursor/.bufab-violations.json` (a "ledger") and letting
+`beforeShellExecution` deny the next `git commit` / `git push` /
+`npm publish` while the ledger has unresolved blockers. That shifts
+Cursor's enforcement from "in-flight feedback" to "pre-commit gate" —
+nothing violating the guidelines leaves the developer's machine.
 
 ## What each hook does
 
@@ -202,10 +210,10 @@ returns the same Bufab reminder as the Cline variant.
 
 Configured via [`.cursor/hooks.json`](../../.cursor/hooks.json).
 
-`afterFileEdit` runs the validator on the edited file. Because Cursor
-discards this hook's stdout (it is informational only), we cannot push the
-violation report into the agent context. Instead we **append it to a
-workspace-local ledger**:
+`afterFileEdit` runs the validator on the edited file. Cursor's
+`afterFileEdit` is informational-only — its stdout is discarded, so we
+push violations to a **workspace-local ledger** instead of returning
+them to Cursor:
 
 - File: `<workspace>/.cursor/.bufab-violations.json`
 - Schema: `{ violations: [...], summary: { blockers, warnings }, updated_at }`
@@ -272,11 +280,13 @@ afterFileEdit hook never re-ran), they can delete the ledger to clear it.
      should appear in the workspace.
    - Try `git commit -m test` from Cursor's chat. The
      `beforeShellExecution` hook should deny it with the violation list.
-5. **Caveat — Cursor cannot inject post-edit feedback into the agent:** the
-   agent will *not* spontaneously notice a violation right after writing
-   the bad code (unlike Cline / Claude Code). Real enforcement happens at
-   commit time. If you want the agent to know sooner, you have to point it
-   at `.cursor/.bufab-violations.json` yourself.
+5. **Note on Cursor's enforcement timing:** Cursor's `afterFileEdit` is
+   informational-only upstream, so the agent does not spontaneously see a
+   violation the moment it writes bad code (Cline and Claude Code do).
+   Real enforcement kicks in at the next `git commit` / `git push` /
+   publish via `beforeShellExecution`. If you want the agent to react
+   sooner inside the same task, point it at `.cursor/.bufab-violations.json`
+   yourself.
 
 ### Claude Code
 
@@ -329,47 +339,53 @@ echo "$payload" | node .clinerules/hooks/lib/cursor-before-shell-execution.mjs
 Each adapter writes its JSON response to stdout. Anything written to stderr
 is debug-only and surfaces in the host tool's hook output panel.
 
-## What is pending (in priority order)
+## What is pending
 
-1. **Tighten AP-06 false-positives.** Right now `border-radius > 2px` flags
-   everywhere. The spec carves out an exception for `industries-grid`
-   tiles (4px allowed). Heuristic to add: skip the check when the file
-   path or surrounding selector contains `industries` / `industries-grid`.
-2. **More semantic blockers.** AP-01 (centered hero), AP-02 (card layouts
-   outside industries-grid), AP-09..AP-13. These need light AST work
-   (parse JSX/HTML, find the hero element, check its `text-align`/
-   `justify-items`/Flex/Grid). Probably worth doing with `acorn` or
+### Detection — make the validator catch more
+
+1. **AP-06 industries-grid carve-out.** Today every `border-radius > 2px`
+   is flagged; the spec allows up to 4px inside `industries-grid` tiles.
+   Heuristic to add: skip the check when the file path or surrounding
+   selector contains `industries` / `industries-grid`.
+2. **Semantic blockers (AP-01, AP-02, AP-09..AP-13).** Need light AST
+   work — parse JSX/HTML to find the hero element and check its
+   alignment, detect cards-outside-industries-grid, etc. `acorn` or
    `htmlparser2` rather than regex.
-3. **Wire the validator into the bufab-mcp server as a tool.** Right now
-   the validator is only reachable via the hook adapters. Exposing it as
-   `validate_files(paths[])` makes it callable by any MCP client (Replit
-   Agent if/when it supports MCP, plus any future tooling).
-4. **CI safety net.** Replit code does not pass through any of these IDE
-   agents at all, so none of these hooks fire on it. The only place to
-   catch a Replit-generated violation is when the code is pushed to the
-   SCM. Add a CI step (Azure DevOps Pipelines / GitHub Actions) that runs
-   `node bufab-mcp/scripts/validate.mjs $(git diff --name-only ...)` on
-   every PR and fails the build if `summary.blockers > 0`.
-5. **Pre-commit hook.** Same script, `.git/hooks/pre-commit` (or Husky).
-   Catches violations on the dev's machine before they leave it,
-   regardless of which IDE produced them. Also closes the Cursor gap
-   since Cursor's `beforeShellExecution` only fires when the agent runs
-   the shell — not when the developer commits from a terminal.
-6. **Soft-fail vs hard-fail toggle.** Right now `PostToolUse` (Cline,
-   Claude Code) never cancels the tool. A `BUFAB_HOOK_STRICT=1` env var
-   could flip it to `cancel: true` / `decision: "block"` for the demo,
-   where we want to show the tool being blocked.
-7. **Audit hook for the demo.** A `TaskComplete` (Cline) /
-   `Stop` (Cursor / Claude Code) hook that runs the validator across
-   every file the agent touched in the task and emits a one-shot
-   scorecard (start at 100, -15 per blocker, -5 per warning, as defined
-   in Part 10 of the guideline doc).
-8. **Explicit Bash blocker on Claude Code.** Mirror Cursor's
-   `beforeShellExecution` deny via Claude Code's `PreToolUse` matcher
-   `"Bash"` checking for `git commit` / `git push` / publish commands.
-9. **Cursor `beforeSubmitPrompt` reminder.** Cursor's docs imply
-   `beforeSubmitPrompt` cannot inject context, but a stderr-only
-   reminder might still help users in the Hooks panel. Cheap to try.
+
+### Reach — catch code that did not pass through any of these hooks
+
+3. **CI safety net.** Replit code never passes through Cline / Cursor /
+   Claude Code, so none of these hooks fire on it. Add a CI step
+   (Azure DevOps Pipelines / GitHub Actions) that runs
+   `node bufab-mcp/scripts/validate.mjs $(git diff --name-only ...)`
+   on every PR and fails the build if `summary.blockers > 0`. **This
+   is the only defense against Replit-generated violations.**
+4. **Pre-commit git hook** (`.git/hooks/pre-commit` or Husky). Catches
+   violations on the dev's machine regardless of which IDE produced
+   them. Also closes the gap of Cursor's `beforeShellExecution` not
+   firing for commits done outside Cursor's chat (e.g. from VS Code's
+   git UI or a terminal).
+5. **Expose the validator as a `bufab-mcp` MCP tool.** Right now it's
+   only reachable via the hook adapters. A `validate_files(paths[])`
+   tool makes it callable from any MCP client.
+
+### Demo polish
+
+6. **Bash command blocking for Cline and Claude Code.** Mirror Cursor's
+   `beforeShellExecution` deny: Cline `PreToolUse` on `execute_command`
+   and Claude Code `PreToolUse` matcher `Bash`, both checking for
+   `git commit` / `git push` / publish commands when the ledger has
+   blockers.
+7. **`BUFAB_HOOK_STRICT=1` toggle.** Flips `PostToolUse` from
+   `contextModification` (soft-fail) to `cancel: true` / `decision: "block"`
+   so the demo can show the tool being blocked outright.
+8. **Task scorecard.** A `TaskComplete` (Cline) / `Stop` (Cursor and
+   Claude Code) hook that runs the validator across every file the
+   agent touched and emits the per-task score from Part 10 of the
+   guideline doc (start at 100, -15 per blocker, -5 per warning).
+9. **Cursor `beforeSubmitPrompt` reminder.** Stdout is informational-only
+   so we can't add to context, but a stderr line surfaces in the Hooks
+   panel for the user. Cheap to try.
 
 ## Things that are intentionally NOT in scope here
 
@@ -379,4 +395,4 @@ is debug-only and surfaces in the host tool's hook output panel.
   governance, etc.). Those have their own MCP tools (`rules_*`,
   `waf_guidelines`) and would need their own validators.
 - **Replit.** Replit does not expose hooks to anything we control. It is
-  covered by the pending CI safety net (item #4) instead.
+  covered by the pending CI safety net (item #3 above) instead.
