@@ -16,10 +16,207 @@
 //   }
 // Exit code: 0 always (the consumer decides how to react). Errors go to stderr.
 
-import { readFileSync, statSync } from "node:fs";
-import { extname, basename, sep } from "node:path";
+import { spawn } from "node:child_process";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { dirname, extname, basename, join, resolve as resolvePath, sep } from "node:path";
+import { createInterface } from "node:readline";
+import { fileURLToPath } from "node:url";
 
-const TOKEN_HEX = new Set(
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// ---------------------------------------------------------------------------
+// Guideline source loader
+//
+// The hardcoded constants below are *fallback* values. The validator prefers
+// to read the live guidelines whenever it can — so a guideline change (new
+// accepted color, new forbidden font, new strict_constraint line) propagates
+// to every hook fire without a code change. Each hook spawns a fresh `node`
+// process, so "load on startup" effectively means "load on every invocation".
+//
+// Source selection via $BUFAB_GUIDELINES_SOURCE (default: "file"):
+//   - "file": read bufab_ui_guidelines.json directly (Layer 1 — fast)
+//   - "mcp":  spawn the bufab-mcp server, call ui_export, parse the result
+//             (Layer 2 — uses LanceDB as runtime source of truth, so rules
+//              updated via ui_upsert reflect immediately without committing
+//              the JSON. Falls back to "file" if the MCP call fails.)
+//
+// Within "file" mode, resolution order is:
+//   1. $BUFAB_UI_GUIDELINES_JSON if set
+//   2. Walk up from this script's dir; at each level try
+//      <dir>/guidelines/bufab_ui_guidelines.json then
+//      <dir>/allguidelines/bufab_ui_guidelines.json (legacy)
+//   3. Fall back to the hardcoded defaults
+//
+// $BUFAB_DISABLE_GUIDELINES=1 short-circuits everything and forces hardcoded.
+// ---------------------------------------------------------------------------
+
+const GUIDELINES_FILENAME = "bufab_ui_guidelines.json";
+const GUIDELINES_DIR_NAMES = ["guidelines", "allguidelines"];
+const GUIDELINES_WALK_LIMIT = 10;
+const MCP_CALL_TIMEOUT_MS = 30000;
+
+let _cachedGuidelines; // undefined = not attempted; null = attempted, missing/invalid
+
+function loadGuidelinesFromFileSync(startDir) {
+  const tryRead = (p) => {
+    try {
+      return JSON.parse(readFileSync(p, "utf8"));
+    } catch (e) {
+      process.stderr.write(
+        `[bufab] failed to parse ${p}: ${e instanceof Error ? e.message : String(e)}\n`,
+      );
+      return null;
+    }
+  };
+  const fromEnv = process.env.BUFAB_UI_GUIDELINES_JSON;
+  if (fromEnv && existsSync(fromEnv)) {
+    const parsed = tryRead(fromEnv);
+    if (parsed) return parsed;
+  }
+  let dir = startDir;
+  for (let i = 0; i < GUIDELINES_WALK_LIMIT; i++) {
+    for (const name of GUIDELINES_DIR_NAMES) {
+      const candidate = join(dir, name, GUIDELINES_FILENAME);
+      if (existsSync(candidate)) {
+        const parsed = tryRead(candidate);
+        if (parsed) return parsed;
+      }
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+function loadGuidelinesFromMcp() {
+  return new Promise((resolveP, rejectP) => {
+    const mcpBinary = resolvePath(__dirname, "..", "dist", "index.js");
+    if (!existsSync(mcpBinary)) {
+      rejectP(new Error(`MCP not built at ${mcpBinary}; run 'npm run build' in bufab-mcp`));
+      return;
+    }
+    const child = spawn(process.execPath, [mcpBinary], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: process.env,
+    });
+    const rl = createInterface({ input: child.stdout });
+    const pending = new Map();
+    let nextId = 1;
+    const send = (msg) => child.stdin.write(JSON.stringify(msg) + "\n");
+    const request = (method, params) => {
+      const id = nextId++;
+      send({ jsonrpc: "2.0", id, method, params });
+      return new Promise((res) => pending.set(id, res));
+    };
+    const cleanup = () => {
+      try {
+        child.kill();
+      } catch {
+        /* ignore */
+      }
+    };
+    const timeout = setTimeout(() => {
+      cleanup();
+      rejectP(new Error(`MCP call timed out after ${MCP_CALL_TIMEOUT_MS}ms`));
+    }, MCP_CALL_TIMEOUT_MS);
+    rl.on("line", (line) => {
+      let msg;
+      try {
+        msg = JSON.parse(line);
+      } catch {
+        return;
+      }
+      if (msg.id !== undefined && pending.has(msg.id)) {
+        const cb = pending.get(msg.id);
+        pending.delete(msg.id);
+        cb(msg);
+      }
+    });
+    child.stderr.on("data", () => {
+      /* swallow MCP boot logs */
+    });
+    child.on("error", (e) => {
+      clearTimeout(timeout);
+      cleanup();
+      rejectP(e);
+    });
+    (async () => {
+      try {
+        const init = await request("initialize", {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "bufab-validator", version: "1.0.0" },
+        });
+        if (init.error) throw new Error(JSON.stringify(init.error));
+        send({ jsonrpc: "2.0", method: "notifications/initialized" });
+        const out = await request("tools/call", {
+          name: "ui_export",
+          arguments: {},
+        });
+        if (out.error) throw new Error(JSON.stringify(out.error));
+        const text = out.result?.content?.[0]?.text;
+        if (!text) throw new Error("empty ui_export response");
+        const guidelines = JSON.parse(text);
+        clearTimeout(timeout);
+        cleanup();
+        resolveP(guidelines);
+      } catch (e) {
+        clearTimeout(timeout);
+        cleanup();
+        rejectP(e);
+      }
+    })();
+  });
+}
+
+export async function loadGuidelines(startDir = __dirname) {
+  if (_cachedGuidelines !== undefined) return _cachedGuidelines;
+  if (process.env.BUFAB_DISABLE_GUIDELINES === "1") {
+    _cachedGuidelines = null;
+    return null;
+  }
+  const source = (process.env.BUFAB_GUIDELINES_SOURCE || "file").toLowerCase();
+  if (source === "mcp") {
+    try {
+      const fromMcp = await loadGuidelinesFromMcp();
+      if (fromMcp) {
+        _cachedGuidelines = fromMcp;
+        return _cachedGuidelines;
+      }
+    } catch (e) {
+      process.stderr.write(
+        `[bufab] MCP source failed (${e instanceof Error ? e.message : String(e)}); falling back to file\n`,
+      );
+    }
+  }
+  const fromFile = loadGuidelinesFromFileSync(startDir);
+  _cachedGuidelines = fromFile ?? null;
+  return _cachedGuidelines;
+}
+
+function extractAllTokenHex(guidelines) {
+  const set = new Set();
+  const visit = (val) => {
+    if (typeof val === "string") {
+      const matches = val.match(/#[0-9a-fA-F]{3,8}\b/g);
+      if (matches) for (const m of matches) set.add(m.toLowerCase());
+    } else if (Array.isArray(val)) {
+      for (const v of val) visit(v);
+    } else if (val && typeof val === "object") {
+      for (const v of Object.values(val)) visit(v);
+    }
+  };
+  visit(guidelines);
+  // Accept short and long forms of black/white interchangeably.
+  if (set.has("#ffffff")) set.add("#fff");
+  if (set.has("#fff")) set.add("#ffffff");
+  if (set.has("#000000")) set.add("#000");
+  if (set.has("#000")) set.add("#000000");
+  return set;
+}
+
+const HARDCODED_TOKEN_HEX = new Set(
   [
     "#0D3349",
     "#1f3c46",
@@ -36,6 +233,30 @@ const TOKEN_HEX = new Set(
     "#000",
   ].map((s) => s.toLowerCase()),
 );
+
+let _tokenHexSet = null;
+function getTokenHexSet() {
+  if (_tokenHexSet) return _tokenHexSet;
+  // Sync access path. Reads from the pre-warmed cache if available; otherwise
+  // does a sync file load (skipping any MCP source — that has to be warmed
+  // via `await loadGuidelines()` before this runs).
+  let g = _cachedGuidelines;
+  if (g === undefined) {
+    if (process.env.BUFAB_DISABLE_GUIDELINES !== "1") {
+      g = loadGuidelinesFromFileSync(__dirname);
+    }
+    _cachedGuidelines = g ?? null;
+  }
+  if (g) {
+    _tokenHexSet = extractAllTokenHex(g);
+  } else {
+    process.stderr.write(
+      "[bufab] guidelines not loaded; using hardcoded token defaults. Set BUFAB_UI_GUIDELINES_JSON or BUFAB_GUIDELINES_SOURCE=mcp.\n",
+    );
+    _tokenHexSet = HARDCODED_TOKEN_HEX;
+  }
+  return _tokenHexSet;
+}
 
 const VALIDATABLE_EXTS = new Set([
   ".css",
@@ -83,9 +304,9 @@ function normalizeHex(hex) {
 
 function isTokenHex(hex) {
   const norm = normalizeHex(hex);
-  if (TOKEN_HEX.has(norm)) return true;
-  // Accept any of our raw tokens regardless of normalization shape
-  for (const t of TOKEN_HEX) {
+  const set = getTokenHexSet();
+  if (set.has(norm)) return true;
+  for (const t of set) {
     if (normalizeHex(t) === norm) return true;
   }
   return false;
@@ -345,6 +566,9 @@ function validateContent(content, file) {
 }
 
 async function main() {
+  // Pre-warm the guidelines cache so detection functions can read it
+  // synchronously. Required when BUFAB_GUIDELINES_SOURCE=mcp.
+  await loadGuidelines();
   const argv = process.argv.slice(2);
   let mode = "files";
   let stdinFile = "<stdin>";
@@ -419,7 +643,11 @@ async function main() {
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
 }
 
-main().catch((e) => {
-  process.stderr.write(`validator crashed: ${e instanceof Error ? e.stack : String(e)}\n`);
-  process.exit(2);
-});
+// Only run as CLI when invoked directly (so other modules can `import` the
+// helpers — e.g. _core.mjs reusing loadGuidelines).
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch((e) => {
+    process.stderr.write(`validator crashed: ${e instanceof Error ? e.stack : String(e)}\n`);
+    process.exit(2);
+  });
+}

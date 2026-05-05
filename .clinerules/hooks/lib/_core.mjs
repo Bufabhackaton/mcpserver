@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadGuidelines } from "../../../bufab-mcp/scripts/validate.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -88,7 +89,10 @@ export function formatViolationReport(displayPath, result) {
   return lines.join("\n");
 }
 
-export const BUFAB_REMINDER = `[Bufab UI guidelines are active in this repo]
+// Hardcoded fallback used only when the guidelines JSON is missing. The
+// preferred path is buildReminderFromGuidelines() which derives the reminder
+// from ui_rules.strict_constraints in the live JSON.
+const HARDCODED_REMINDER = `[Bufab UI guidelines are active in this repo]
 Blockers (each violation is a -15 score penalty; PR cannot merge):
 - AP-03  no gradients anywhere (linear-gradient, radial-gradient, conic-gradient)
 - AP-04  accent #E8610A only as CTA button background, never as text/border/icon
@@ -109,3 +113,37 @@ A post-write hook will validate every file you write/edit and feed back any
 violations it finds. Treat that feedback as a build error - fix and re-edit.
 
 Full reference: guidelines/bufab_ui_guidelines.md`;
+
+function buildReminderFromGuidelines(guidelines) {
+  const constraints = guidelines?.ui_rules?.strict_constraints;
+  if (!Array.isArray(constraints) || constraints.length === 0) return null;
+  const version = guidelines?.meta?.version;
+  const lines = [
+    `[Bufab UI guidelines are active in this repo${version ? ` (v${version})` : ""}]`,
+    "",
+    "Strict constraints (each blocker violation is a -15 score penalty; PR cannot merge):",
+  ];
+  for (const c of constraints) lines.push(`- ${c}`);
+  lines.push("");
+  lines.push("Before writing UI code, call the bufab-mcp tools:");
+  lines.push("- ui_section_spec(section_type) for the section you are about to build");
+  lines.push("- ui_token(name) for any color or spacing value");
+  lines.push("- ui_search(query) for anything not covered by the two above");
+  lines.push("");
+  lines.push(
+    "A post-write hook will validate every file you write/edit and feed back any",
+  );
+  lines.push("violations it finds. Treat that feedback as a build error - fix and re-edit.");
+  lines.push("");
+  lines.push("Full reference: guidelines/bufab_ui_guidelines.md");
+  return lines.join("\n");
+}
+
+// Computed at module load via top-level await. Each hook spawns a fresh node
+// process, so this re-fetches the guidelines on every invocation — edits to
+// the JSON (or to LanceDB via ui_upsert when BUFAB_GUIDELINES_SOURCE=mcp)
+// land immediately without a redeploy.
+const _g = await loadGuidelines(__dirname);
+export const BUFAB_REMINDER = _g
+  ? (buildReminderFromGuidelines(_g) ?? HARDCODED_REMINDER)
+  : HARDCODED_REMINDER;
