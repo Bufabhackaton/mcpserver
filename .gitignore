@@ -41,4 +41,4 @@ bufab-mcp/dist/
 .cursor/.bufab-violations.json
 .claude/settings.local.json
 
-mcp.json
+.cursor/mcp.json
