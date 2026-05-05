@@ -164,3 +164,5 @@ Add the same server entry as in .cursor/mcp.json, but with absolute paths for th
 ```
 
 Save the file — Cline picks it up automatically, no restart needed.
+
+
