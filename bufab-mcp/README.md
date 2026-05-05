@@ -127,3 +127,40 @@ npm run verify:ui
 ## License
 
 Private package (`"private": true` in `package.json`). Use according to your organization’s policy.
+
+
+## Setting Up MCP on Cline
+
+Cursor and Cline are separate MCP clients and do not share config. You need to add the server to Cline's own settings file.
+Steps
+
+Find Cline's config file:
+
+```bash
+find ~/Library/Application\ Support/Cursor -name "cline_mcp_settings.json" 2>/dev/null
+```
+
+Open the file it returns:
+
+```bash
+open "/Users/<you>/Library/Application Support/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+```
+
+Add the same server entry as in .cursor/mcp.json, but with absolute paths for the LanceDB directories:
+
+```json
+{
+     "mcpServers": {
+       "bufab-mcp": {
+         "command": "node",
+         "args": ["/absolute/path/to/bufab-mcp/dist/index.js"],
+         "env": {
+           "BUFAB_UI_DB_PATH": "/absolute/path/to/bufab-mcp/.lancedb-ui",
+           "BUFAB_RULES_DB_PATH": "/absolute/path/to/bufab-mcp/.lancedb"
+         }
+       }
+     }
+   }
+```
+
+Save the file — Cline picks it up automatically, no restart needed.
