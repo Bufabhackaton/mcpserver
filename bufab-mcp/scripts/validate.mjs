@@ -57,36 +57,33 @@ const MCP_CALL_TIMEOUT_MS = 30000;
 
 let _cachedGuidelines; // undefined = not attempted; null = attempted, missing/invalid
 
-function loadGuidelinesFromFileSync(startDir) {
-  const tryRead = (p) => {
-    try {
-      return JSON.parse(readFileSync(p, "utf8"));
-    } catch (e) {
-      process.stderr.write(
-        `[bufab] failed to parse ${p}: ${e instanceof Error ? e.message : String(e)}\n`,
-      );
-      return null;
-    }
-  };
+function findGuidelinesJsonPath(startDir) {
   const fromEnv = process.env.BUFAB_UI_GUIDELINES_JSON;
-  if (fromEnv && existsSync(fromEnv)) {
-    const parsed = tryRead(fromEnv);
-    if (parsed) return parsed;
-  }
+  if (fromEnv && existsSync(fromEnv)) return fromEnv;
   let dir = startDir;
   for (let i = 0; i < GUIDELINES_WALK_LIMIT; i++) {
     for (const name of GUIDELINES_DIR_NAMES) {
       const candidate = join(dir, name, GUIDELINES_FILENAME);
-      if (existsSync(candidate)) {
-        const parsed = tryRead(candidate);
-        if (parsed) return parsed;
-      }
+      if (existsSync(candidate)) return candidate;
     }
     const parent = dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
   return null;
+}
+
+function loadGuidelinesFromFileSync(startDir) {
+  const path = findGuidelinesJsonPath(startDir);
+  if (!path) return null;
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch (e) {
+    process.stderr.write(
+      `[bufab] failed to parse ${path}: ${e instanceof Error ? e.message : String(e)}\n`,
+    );
+    return null;
+  }
 }
 
 function loadGuidelinesFromMcp() {
@@ -96,9 +93,18 @@ function loadGuidelinesFromMcp() {
       rejectP(new Error(`MCP not built at ${mcpBinary}; run 'npm run build' in bufab-mcp`));
       return;
     }
+    // If the parent doesn't already point at a guidelines JSON, try to find
+    // one via walk-up and pass it to the child so the MCP can auto-seed an
+    // empty LanceDB on first use. The child still works without this if its
+    // LanceDB is already populated.
+    const childEnv = { ...process.env };
+    if (!childEnv.BUFAB_UI_GUIDELINES_JSON) {
+      const found = findGuidelinesJsonPath(__dirname);
+      if (found) childEnv.BUFAB_UI_GUIDELINES_JSON = found;
+    }
     const child = spawn(process.execPath, [mcpBinary], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: process.env,
+      env: childEnv,
     });
     const rl = createInterface({ input: child.stdout });
     const pending = new Map();
@@ -176,7 +182,7 @@ export async function loadGuidelines(startDir = __dirname) {
     _cachedGuidelines = null;
     return null;
   }
-  const source = (process.env.BUFAB_GUIDELINES_SOURCE || "file").toLowerCase();
+  const source = (process.env.BUFAB_GUIDELINES_SOURCE || "mcp").toLowerCase();
   if (source === "mcp") {
     try {
       const fromMcp = await loadGuidelinesFromMcp();
@@ -258,7 +264,7 @@ function getTokenHexSet() {
   return _tokenHexSet;
 }
 
-const VALIDATABLE_EXTS = new Set([
+const UI_VALIDATABLE_EXTS = new Set([
   ".css",
   ".scss",
   ".sass",
@@ -273,6 +279,10 @@ const VALIDATABLE_EXTS = new Set([
   ".svelte",
   ".astro",
 ]);
+
+const IAC_VALIDATABLE_EXTS = new Set([".bicep", ".bicepparam", ".tf"]);
+
+const INFRA_RULE_SLUG = "bufab-infrastructure-context-overlay";
 
 const WEB_FONT_NAMES = [
   "Inter",
@@ -539,7 +549,22 @@ function detectFontFamilyShape(content, file, out) {
 }
 
 function isValidatableFile(path) {
-  return VALIDATABLE_EXTS.has(extname(path).toLowerCase());
+  const ext = extname(path).toLowerCase();
+  if (UI_VALIDATABLE_EXTS.has(ext)) return true;
+  if (IAC_VALIDATABLE_EXTS.has(ext)) return true;
+  if (path.toLowerCase().endsWith(".tf.json")) return true;
+  return false;
+}
+
+function isUiFile(path) {
+  return UI_VALIDATABLE_EXTS.has(extname(path).toLowerCase());
+}
+
+function isIacFile(path) {
+  const ext = extname(path).toLowerCase();
+  if (IAC_VALIDATABLE_EXTS.has(ext)) return true;
+  if (path.toLowerCase().endsWith(".tf.json")) return true;
+  return false;
 }
 
 function shouldSkipPath(path) {
@@ -553,15 +578,157 @@ function shouldSkipPath(path) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Infrastructure-as-code checks
+//
+// Driven by the rule body stored under slug `bufab-infrastructure-context-overlay`
+// in the MCP `.lancedb` (rules_*). The actual rule text is prose, so the
+// regex-level checks are hardcoded here against the well-known Bufab
+// expectations: required tags, naming convention, and no hardcoded secrets.
+// Each violation message points back at `rules_get(slug=...)` so the agent or
+// dev can fetch the full rationale.
+// ---------------------------------------------------------------------------
+
+function fileLooksLikeBicep(content, file) {
+  return file.toLowerCase().endsWith(".bicep") || file.toLowerCase().endsWith(".bicepparam");
+}
+
+function fileLooksLikeTerraform(file) {
+  const lower = file.toLowerCase();
+  return lower.endsWith(".tf") || lower.endsWith(".tf.json");
+}
+
+function detectInfraRequiredTags(content, file, out) {
+  if (!isIacFile(file)) return;
+  // Skip parameter-only files; they shouldn't carry tags.
+  if (file.toLowerCase().endsWith(".bicepparam")) return;
+  // Heuristic: only flag files that actually declare resources.
+  const declaresBicepResource = /^\s*resource\s+\S+\s+'/m.test(content);
+  const declaresTerraformResource = /^\s*resource\s+"[^"]+"\s+"/m.test(content);
+  if (!declaresBicepResource && !declaresTerraformResource) return;
+
+  const required = ["Owner", "CostCenter", "ProjectID"];
+  const missing = required.filter((k) => !new RegExp(`\\b${k}\\b`).test(content));
+  if (missing.length === 0) return;
+
+  pushViolation(out, {
+    rule: "INFRA-01",
+    severity: "blocker",
+    file,
+    line: 1,
+    matched: "(file scan)",
+    message:
+      `Missing required Bufab tags: ${missing.join(", ")}. ` +
+      `Every Azure resource must be tagged with Owner, CostCenter, and ProjectID. ` +
+      `See rules_get(slug=${INFRA_RULE_SLUG}) for the full overlay.`,
+  });
+}
+
+function detectInfraNaming(content, file, out) {
+  if (!isIacFile(file)) return;
+
+  // Bicep: `name: 'literal-string'` (skip interpolated `${...}` values).
+  if (fileLooksLikeBicep(content, file)) {
+    const re = /^[ \t]*name\s*:\s*'([^'$\n]+)'/gm;
+    for (const m of content.matchAll(re)) {
+      const value = m[1];
+      if (!value.startsWith("bufab-")) {
+        pushViolation(out, {
+          rule: "INFRA-02",
+          severity: "warning",
+          file,
+          line: lineOf(content, m.index),
+          matched: m[0].trim(),
+          message:
+            `Resource name '${value}' should follow bufab-<env>-<region>-<app>-<resource>. ` +
+            `See rules_get(slug=${INFRA_RULE_SLUG}).`,
+        });
+      }
+    }
+  }
+
+  // Terraform HCL: `name = "literal-string"` (skip interpolated `${...}` values).
+  if (fileLooksLikeTerraform(file)) {
+    const re = /^[ \t]*name\s*=\s*"([^"$\n]+)"/gm;
+    for (const m of content.matchAll(re)) {
+      const value = m[1];
+      if (!value.startsWith("bufab-")) {
+        pushViolation(out, {
+          rule: "INFRA-02",
+          severity: "warning",
+          file,
+          line: lineOf(content, m.index),
+          matched: m[0].trim(),
+          message:
+            `Resource name '${value}' should follow bufab-<env>-<region>-<app>-<resource>. ` +
+            `See rules_get(slug=${INFRA_RULE_SLUG}).`,
+        });
+      }
+    }
+  }
+}
+
+function detectHardcodedSecrets(content, file, out) {
+  if (!isIacFile(file)) return;
+
+  const patterns = [
+    {
+      re: /AccountKey=[A-Za-z0-9+/=]{20,}/g,
+      label: "storage AccountKey",
+      remediation: "use Key Vault references or Managed Identity",
+    },
+    {
+      re: /SharedAccessSignature=[^"'\s]{20,}/g,
+      label: "Shared Access Signature",
+      remediation: "use Managed Identity",
+    },
+    {
+      re: /\bsv=\d{4}-\d{2}-\d{2}&[^"'\s]*sig=/g,
+      label: "SAS token",
+      remediation: "use Managed Identity",
+    },
+    {
+      // Catch field names like `password`, `pwd`, `secret`, `clientSecret`,
+      // and the snake_case variants (`administrator_login_password`,
+      // `client_secret`) followed by an assignment to a quoted literal.
+      re: /\w*(?:password|pwd|secret)\w*\s*[:=]\s*(['"])[^'"\n]{6,}\1/gi,
+      label: "credential",
+      remediation: "load from Key Vault or env, never as a literal",
+    },
+  ];
+
+  for (const p of patterns) {
+    for (const m of content.matchAll(p.re)) {
+      pushViolation(out, {
+        rule: "INFRA-03",
+        severity: "blocker",
+        file,
+        line: lineOf(content, m.index),
+        matched: m[0].slice(0, 40) + (m[0].length > 40 ? "..." : ""),
+        message:
+          `Hardcoded ${p.label} in IaC file — ${p.remediation}. ` +
+          `See rules_get(slug=${INFRA_RULE_SLUG}).`,
+      });
+    }
+  }
+}
+
 function validateContent(content, file) {
   const violations = [];
-  detectGradients(content, file, violations);
-  detectWebFonts(content, file, violations);
-  detectBorderRadius(content, file, violations);
-  detectHeaderScrollListener(content, file, violations);
-  detectAccentColorMisuse(content, file, violations);
-  detectOffPaletteHex(content, file, violations);
-  detectFontFamilyShape(content, file, violations);
+  if (isUiFile(file)) {
+    detectGradients(content, file, violations);
+    detectWebFonts(content, file, violations);
+    detectBorderRadius(content, file, violations);
+    detectHeaderScrollListener(content, file, violations);
+    detectAccentColorMisuse(content, file, violations);
+    detectOffPaletteHex(content, file, violations);
+    detectFontFamilyShape(content, file, violations);
+  }
+  if (isIacFile(file)) {
+    detectInfraRequiredTags(content, file, violations);
+    detectInfraNaming(content, file, violations);
+    detectHardcodedSecrets(content, file, violations);
+  }
   return violations;
 }
 

@@ -1,12 +1,24 @@
 # Bufab guideline enforcement — agent hooks (Cline, Cursor, Claude Code)
 
-> **Audience:** the hackathon team. The Bufab UI guidelines in
-> `guidelines/bufab_ui_guidelines.md` describe 13 anti-patterns that AI agents
-> need to respect (gradients, web fonts, oversized border-radius, header that
-> turns white on scroll, accent orange used outside CTA buttons, etc.). This
-> folder contains hook scripts that enforce them deterministically — without
-> relying on the model to remember a system prompt. Hooks are wired up for
-> the three IDE agents we plan to demo: **Cline**, **Cursor**, and
+> **Audience:** the hackathon team. Bufab maintains two guideline sources
+> that AI agents need to respect:
+>
+> 1. **UI guidelines** — 13 anti-patterns in `guidelines/bufab_ui_guidelines.md`
+>    (gradients, web fonts, oversized border-radius, header that turns white
+>    on scroll, accent orange used outside CTA buttons, etc.). Also stored
+>    structurally in the `bufab-mcp` server's `.lancedb-ui` and queryable via
+>    the `ui_*` MCP tools.
+> 2. **Infrastructure overlay** — Bufab-specific Azure expectations on top
+>    of the Microsoft Well-Architected Framework: required tags
+>    (`Owner`/`CostCenter`/`ProjectID`), naming convention
+>    (`bufab-<env>-<region>-<app>-<resource>`), Bicep preferred for new
+>    workloads, Key Vault for secrets, etc. Stored in `.lancedb` under
+>    slug `bufab-infrastructure-context-overlay` and queryable via the
+>    `rules_*` MCP tools.
+>
+> This folder contains hook scripts that enforce both deterministically —
+> without relying on the model to remember a system prompt. Hooks are wired
+> up for the three IDE agents we plan to demo: **Cline**, **Cursor**, and
 > **Claude Code**.
 >
 > **All three tools support hooks today.** Cursor added them in 1.7
@@ -121,6 +133,8 @@ the same code with the same rules.
 
 It currently detects, deterministically via regex:
 
+**UI rules** (run only on `.css`, `.scss`, `.html`, `.tsx`, `.jsx`, `.ts`, `.js`, `.vue`, `.svelte`, `.astro`):
+
 | ID         | Severity | What we look for                                                             |
 | ---------- | -------- | ---------------------------------------------------------------------------- |
 | AP-03      | blocker  | `linear-gradient(`, `radial-gradient(`, `conic-gradient(`                    |
@@ -131,6 +145,20 @@ It currently detects, deterministically via regex:
 | COLOR-03   | blocker  | Any hex color outside the Bufab token set                                    |
 | TYPE-01    | blocker  | `font-family` with a known web font name (Inter, Roboto, Poppins, Montserrat, ...) |
 | TYPE-01    | warning  | `font-family` declaration that does not include the system stack             |
+
+**Infrastructure rules** (run only on `.bicep`, `.bicepparam`, `.tf`, `.tf.json`):
+
+| ID         | Severity | What we look for                                                             |
+| ---------- | -------- | ---------------------------------------------------------------------------- |
+| INFRA-01   | blocker  | Resource-declaring file missing required tags `Owner`, `CostCenter`, `ProjectID` |
+| INFRA-02   | warning  | Resource `name` literal that does not start with `bufab-<env>-<region>-<app>-<resource>` |
+| INFRA-03   | blocker  | Hardcoded `AccountKey=...`, SAS token (`sv=...&sig=...`), `SharedAccessSignature=...`, or `password`/`secret` field assigned to a literal |
+
+The infra rules are sourced from the `bufab-infrastructure-context-overlay`
+rule stored in `.lancedb` (queryable via `rules_get(slug=bufab-infrastructure-context-overlay)`).
+The validator's regexes encode the deterministic checks; each violation
+message points back at the rule slug so the agent or dev can fetch the
+full prose for context.
 
 Run it manually:
 
@@ -160,26 +188,54 @@ Output is JSON:
 The validator never fails — it always exits 0 with a JSON report. The
 *caller* (hook adapter, CI, etc.) decides what to do with the report.
 
-#### Live-loading from `bufab_ui_guidelines.json` *or* the MCP server
+#### Test suite
+
+`bufab-mcp/scripts/validate-test.mjs` runs the validator against six
+fixtures under `bufab-mcp/scripts/test-fixtures/` and asserts the
+expected blockers/warnings appear (and that "good" fixtures stay clean):
+
+```bash
+cd bufab-mcp
+npm run test:validator
+```
+
+The runner forces `BUFAB_GUIDELINES_SOURCE=file` so results stay stable
+against the JSON committed to the guidelines repo, regardless of any
+local LanceDB drift. Exits non-zero on first mismatch — suitable for
+CI (Pending #6).
+
+When you add a new check to the validator, add a fixture that
+exercises it and a case row in `validate-test.mjs`. Same flow for
+adding new accepted-color tokens or new strict_constraints — update
+the corresponding `*-good` fixture to use them.
+
+#### Live-loading from the MCP (default) *or* the JSON file
 
 The validator's accepted-color palette and the `UserPromptSubmit` reminder
 text are **not hardcoded**. Both are derived at every spawn from one of
 two live sources, selected by `$BUFAB_GUIDELINES_SOURCE`:
 
-- **`file`** (default) — read `bufab_ui_guidelines.json` directly. Fast,
-  offline, no MCP dependency. **Resolution order:**
+- **`mcp`** *(default)* — spawn `bufab-mcp/dist/index.js` per validator
+  invocation, call the `ui_export` tool over JSON-RPC, parse the merged
+  guidelines it returns. The MCP rebuilds the document from LanceDB, so
+  rules updated via `ui_upsert` (or any other LanceDB write) propagate
+  to the next hook fire **without committing the JSON file**. If the
+  validator can find a `bufab_ui_guidelines.json` via walk-up, it
+  passes that path to the MCP child as `BUFAB_UI_GUIDELINES_JSON` so
+  the MCP can auto-seed an empty LanceDB on first use.
+
+- **`file`** — read `bufab_ui_guidelines.json` directly. Faster (no MCP
+  spawn), offline, no MCP dependency. **Resolution order:**
   1. `$BUFAB_UI_GUIDELINES_JSON` if set
   2. Walk up from the script's directory looking for
      `<dir>/guidelines/bufab_ui_guidelines.json` (or
      `<dir>/allguidelines/bufab_ui_guidelines.json`, the legacy path)
   3. Fall back to a hardcoded snapshot baked into the validator
 
-- **`mcp`** — spawn `bufab-mcp/dist/index.js` per validator invocation,
-  call the `ui_export` tool over JSON-RPC, parse the merged guidelines
-  it returns. The MCP rebuilds the document from LanceDB, so rules
-  updated via `ui_upsert` (or any other LanceDB write) propagate to the
-  next hook fire **without committing the JSON file**. Falls back to
-  `file` if the MCP call fails.
+If `mcp` mode fails (binary not built, server crash, etc.), the loader
+**automatically falls back** to `file` mode and writes a notice on
+stderr. So a fresh clone that hasn't run `npm install && npm run build`
+in `bufab-mcp/` still gets working enforcement against the JSON file.
 
 Because every hook fire spawns a fresh `node` process, "load on startup"
 effectively means "load on every invocation" — a guideline change lands
@@ -188,9 +244,10 @@ a new `strict_constraint` line, `ui_upsert` a new fragment — the next
 file Cline/Cursor/Claude Code writes will already be validated against
 the new rules.
 
-**Trade-off**: `mcp` mode adds ~1-3 s cold start per hook fire (LanceDB
-init + JSON-RPC handshake). For most demo flows this is fine; if it
-shows up in latency, see Pending #4 (cross-spawn cache + fingerprint).
+**Trade-off of the `mcp` default**: ~1-3 s cold start per hook fire
+(LanceDB init + JSON-RPC handshake). Acceptable for typical demo flows;
+if it shows up in latency, see Pending #3 (cross-spawn cache +
+fingerprint) or set `BUFAB_GUIDELINES_SOURCE=file` to skip the spawn.
 
 What is **not** auto-loaded: the regex/AST detection logic itself
 (`detectGradients`, `detectHeaderScrollListener`, etc.). Those are code
@@ -201,8 +258,8 @@ Environment variables for ops:
 
 | Variable                       | Effect                                                                 |
 | ------------------------------ | ---------------------------------------------------------------------- |
-| `BUFAB_GUIDELINES_SOURCE`      | `file` (default) or `mcp`. Selects the live source.                    |
-| `BUFAB_UI_GUIDELINES_JSON`     | Absolute path to the JSON when in `file` mode. Skips the walk.         |
+| `BUFAB_GUIDELINES_SOURCE`      | `mcp` (default) or `file`. Selects the live source.                    |
+| `BUFAB_UI_GUIDELINES_JSON`     | Absolute path to the JSON. Used by `file` mode and propagated to the MCP child for auto-seeding. |
 | `BUFAB_DISABLE_GUIDELINES=1`   | Forces the hardcoded fallback. Useful for tests and pinned demos.      |
 | `BUFAB_UI_FORCE_RESEED=1`      | (consumed by the MCP server) re-imports the JSON into LanceDB on boot. |
 
@@ -397,14 +454,26 @@ is debug-only and surfaces in the host tool's hook output panel.
    work — parse JSX/HTML to find the hero element and check its
    alignment, detect cards-outside-industries-grid, etc. `acorn` or
    `htmlparser2` rather than regex.
+3. **More INFRA checks.** Today INFRA-01..03 are encoded; the rule body
+   covers more (App Service vs AKS preference, encryption-at-rest,
+   approved SKU families, private connectivity for PaaS). These need
+   either richer regex patterns or proper Bicep/HCL parsers (e.g.
+   `bicep`'s own AST library, or `hcl-parser` for Terraform). Worth
+   doing once we see real infra files in the demo.
+4. **Data-driven INFRA rules from `.lancedb` / `rules_*`.** Right now
+   the INFRA detection logic is hardcoded regex; only the rule body
+   text is fetched on demand via `rules_get`. Mirror the Layer 1/2
+   pattern from the UI side so an `INFRA-04 forbidden-SKU` rule can
+   be added by `rules_upsert` without a code change. Requires adopting
+   a structured "rule packet" shape (regex + severity + message + slug).
 
 ### Live guidelines — beyond Layers 1 & 2
 
 Layers 1 (file-based loading) and 2 (`BUFAB_GUIDELINES_SOURCE=mcp` pulls
-from the MCP / LanceDB) are **done**. One layer left from the original
-plan:
+from the MCP / LanceDB) are **done** for UI guidelines. One layer left
+from the original plan:
 
-3. **Layer 3 — cross-spawn cache + fingerprint.** Today MCP mode pays a
+5. **Layer 3 — cross-spawn cache + fingerprint.** Today MCP mode pays a
    ~1-3 s cold start per hook fire (LanceDB init + JSON-RPC handshake).
    Add a small on-disk cache of the last `ui_export` result keyed by a
    version/etag the MCP returns; the validator uses the cached snapshot
@@ -414,36 +483,36 @@ plan:
 
 ### Reach — catch code that did not pass through any of these hooks
 
-4. **CI safety net.** Replit code never passes through Cline / Cursor /
+6. **CI safety net.** Replit code never passes through Cline / Cursor /
    Claude Code, so none of these hooks fire on it. Add a CI step
    (Azure DevOps Pipelines / GitHub Actions) that runs
    `node bufab-mcp/scripts/validate.mjs $(git diff --name-only ...)`
    on every PR and fails the build if `summary.blockers > 0`. **This
    is the only defense against Replit-generated violations.**
-5. **Pre-commit git hook** (`.git/hooks/pre-commit` or Husky). Catches
+7. **Pre-commit git hook** (`.git/hooks/pre-commit` or Husky). Catches
    violations on the dev's machine regardless of which IDE produced
    them. Also closes the gap of Cursor's `beforeShellExecution` not
    firing for commits done outside Cursor's chat (e.g. from VS Code's
    git UI or a terminal).
-6. **Expose the validator as a `bufab-mcp` MCP tool.** Right now it's
+8. **Expose the validator as a `bufab-mcp` MCP tool.** Right now it's
    only reachable via the hook adapters. A `validate_files(paths[])`
    tool makes it callable from any MCP client.
 
 ### Demo polish
 
-7. **Bash command blocking for Cline and Claude Code.** Mirror Cursor's
+9. **Bash command blocking for Cline and Claude Code.** Mirror Cursor's
    `beforeShellExecution` deny: Cline `PreToolUse` on `execute_command`
    and Claude Code `PreToolUse` matcher `Bash`, both checking for
    `git commit` / `git push` / publish commands when the ledger has
    blockers.
-8. **`BUFAB_HOOK_STRICT=1` toggle.** Flips `PostToolUse` from
-   `contextModification` (soft-fail) to `cancel: true` / `decision: "block"`
-   so the demo can show the tool being blocked outright.
-9. **Task scorecard.** A `TaskComplete` (Cline) / `Stop` (Cursor and
-   Claude Code) hook that runs the validator across every file the
-   agent touched and emits the per-task score from Part 10 of the
-   guideline doc (start at 100, -15 per blocker, -5 per warning).
-10. **Cursor `beforeSubmitPrompt` reminder.** Stdout is informational-only
+10. **`BUFAB_HOOK_STRICT=1` toggle.** Flips `PostToolUse` from
+    `contextModification` (soft-fail) to `cancel: true` / `decision: "block"`
+    so the demo can show the tool being blocked outright.
+11. **Task scorecard.** A `TaskComplete` (Cline) / `Stop` (Cursor and
+    Claude Code) hook that runs the validator across every file the
+    agent touched and emits the per-task score from Part 10 of the
+    guideline doc (start at 100, -15 per blocker, -5 per warning).
+12. **Cursor `beforeSubmitPrompt` reminder.** Stdout is informational-only
     so we can't add to context, but a stderr line surfaces in the Hooks
     panel for the user. Cheap to try.
 
@@ -451,8 +520,12 @@ plan:
 
 - **Catching violations in already-committed code.** That is a bulk-audit
   problem; this folder is about the in-flight feedback loop.
-- **Enforcing rules outside the UI guideline document** (Azure infra rules,
-  governance, etc.). Those have their own MCP tools (`rules_*`,
-  `waf_guidelines`) and would need their own validators.
+- **The full Azure governance surface.** We enforce three deterministic
+  Bufab-specific infra rules today (INFRA-01..03 above). The broader Azure
+  Well-Architected Framework guidance available via `waf_guidelines`
+  (resilience, performance efficiency, cost models, full security
+  baseline, etc.) is **not** machine-checked here — that lives in
+  `waf_guidelines` for the agent to consult, and ultimately in
+  Azure Policy / PR review.
 - **Replit.** Replit does not expose hooks to anything we control. It is
-  covered by the pending CI safety net (item #4 above) instead.
+  covered by the pending CI safety net (item #6 above) instead.

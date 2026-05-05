@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "verify": "node scripts/mcp-smoke.mjs",
-    "verify:ui": "node scripts/ui-seed-verify.mjs"
+    "verify:ui": "node scripts/ui-seed-verify.mjs",
+    "test:validator": "node scripts/validate-test.mjs"
   },
   "engines": {
     "node": ">=18"

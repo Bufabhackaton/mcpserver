@@ -1,0 +1,12 @@
+/* Fail case: deliberately violates multiple rules. Used by validate-test.mjs. */
+@font-face {
+  font-family: 'CustomFont';
+  src: url('font.woff2');
+}
+
+.hero {
+  background: linear-gradient(45deg, #ff0000, #00ff00);
+  border-radius: 16px;
+  color: #E8610A;
+  font-family: "Inter", sans-serif;
+}
