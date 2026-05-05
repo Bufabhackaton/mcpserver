@@ -42,8 +42,21 @@ export function resolveAgainstWorkspace(relPath, workspaceRoot) {
 export function runValidator(absPath) {
   if (!absPath || !existsSync(absPath)) return null;
   if (!existsSync(VALIDATOR_PATH)) {
-    process.stderr.write(`[bufab] validator not found at ${VALIDATOR_PATH}\n`);
-    return null;
+    const message = `validator not found at ${VALIDATOR_PATH}`;
+    process.stderr.write(`[bufab] ${message}\n`);
+    return {
+      violations: [
+        {
+          rule: "VALIDATOR-00",
+          severity: "blocker",
+          file: absPath,
+          line: 1,
+          matched: "<validator missing>",
+          message: `Validator infrastructure error: ${message}`,
+        },
+      ],
+      summary: { blockers: 1, warnings: 0, filesScanned: 1 },
+    };
   }
   let stdout = "";
   try {
@@ -52,15 +65,47 @@ export function runValidator(absPath) {
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (e) {
+    const details =
+      e && typeof e === "object" && "stderr" in e && typeof e.stderr === "string" && e.stderr.trim()
+        ? e.stderr.trim()
+        : e instanceof Error
+          ? e.message
+          : String(e);
     process.stderr.write(
-      `[bufab] validator failed: ${e instanceof Error ? e.message : String(e)}\n`,
+      `[bufab] validator failed: ${details}\n`,
     );
-    return null;
+    return {
+      violations: [
+        {
+          rule: "VALIDATOR-00",
+          severity: "blocker",
+          file: absPath,
+          line: 1,
+          matched: "<validator failed>",
+          message: `Validator infrastructure error: ${details}`,
+        },
+      ],
+      summary: { blockers: 1, warnings: 0, filesScanned: 1 },
+    };
   }
   try {
     return JSON.parse(stdout);
   } catch {
-    return null;
+    const details = `validator output was not valid JSON: ${String(stdout).slice(0, 300)}`;
+    process.stderr.write(`[bufab] ${details}\n`);
+    return {
+      violations: [
+        {
+          rule: "VALIDATOR-00",
+          severity: "blocker",
+          file: absPath,
+          line: 1,
+          matched: "<invalid validator output>",
+          message: `Validator infrastructure error: ${details}`,
+        },
+      ],
+      summary: { blockers: 1, warnings: 0, filesScanned: 1 },
+    };
   }
 }
 
@@ -140,10 +185,17 @@ function buildReminderFromGuidelines(guidelines) {
 }
 
 // Computed at module load via top-level await. Each hook spawns a fresh node
-// process, so this re-fetches the guidelines on every invocation — edits to
-// the JSON (or to LanceDB via ui_upsert when BUFAB_GUIDELINES_SOURCE=mcp)
-// land immediately without a redeploy.
-const _g = await loadGuidelines(__dirname);
-export const BUFAB_REMINDER = _g
-  ? (buildReminderFromGuidelines(_g) ?? HARDCODED_REMINDER)
-  : HARDCODED_REMINDER;
+// process, so this re-fetches live MCP/LanceDB guidelines on every invocation.
+// If live loading fails (MCP unavailable, empty UI DB, etc.), do not crash hook
+// module initialization — fall back to the static reminder text.
+let _g = null;
+try {
+  _g = await loadGuidelines();
+} catch (e) {
+  process.stderr.write(
+    `[bufab] warning: failed to load live guidelines for reminder text; using hardcoded reminder (${
+      e instanceof Error ? e.message : String(e)
+    })\n`,
+  );
+}
+export const BUFAB_REMINDER = buildReminderFromGuidelines(_g) ?? HARDCODED_REMINDER;

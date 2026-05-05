@@ -31,6 +31,15 @@ function jsonText(data: unknown): string {
   return JSON.stringify(data, null, 2);
 }
 
+function emptyUiDbMessage(): string {
+  return (
+    "UI guidelines database is empty. Populate LanceDB explicitly via `ui_upsert` before calling export tools.\n\n" +
+    "Example:\n" +
+    "- call `ui_upsert` with a fragment slug (e.g. `tokens-colors`)\n" +
+    "- repeat for required fragments (`spec-meta`, `layout`, sections, tokens, etc.)"
+  );
+}
+
 function loadBufabAppendix(): string {
   const path = join(__dirname, "..", "data", "bufab-infrastructure-appendix.md");
   try {
@@ -111,7 +120,7 @@ const server = new McpServer(
   },
   {
     instructions:
-      "Tools: (1) waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) rules_* — infrastructure rules in LanceDB (.lancedb). (3) ui_* (including ui_section_spec, ui_token, ui_export, ui_export_markdown) — UI guidelines fragments in LanceDB (.lancedb-ui), seeded from bufab_ui_guidelines.json. Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_GUIDELINES_JSON, BUFAB_UI_FORCE_RESEED=1 to re-import JSON. First embedding use downloads MiniLM via @huggingface/transformers.",
+      "Tools: (1) waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) rules_* — infrastructure rules in LanceDB (.lancedb). (3) ui_* (including ui_section_spec, ui_token, ui_export, ui_export_markdown) — UI guidelines fragments in LanceDB (.lancedb-ui). Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_FORCE_RESEED=1 to clear and rebuild UI data via ui_upsert. First embedding use downloads MiniLM via @huggingface/transformers.",
   },
 );
 
@@ -547,12 +556,19 @@ server.registerTool(
   {
     title: "Export merged UI guidelines JSON",
     description:
-      "Rebuilds a bufab_ui_guidelines.json-shaped object from all current UI fragments in LanceDB (meta + ui_rules).",
+      "Rebuilds the canonical UI guidelines object from all current UI fragments in LanceDB (meta + ui_rules).",
     inputSchema: z.object({}),
   },
   async () => {
     try {
       const store = await getUiGuidelinesStore();
+      const count = await store.countEntities();
+      if (count === 0) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: emptyUiDbMessage() }],
+        };
+      }
       const doc = await store.exportMergedGuidelines();
       return { content: [{ type: "text", text: jsonText(doc) }] };
     } catch (e) {
@@ -573,6 +589,13 @@ server.registerTool(
   async () => {
     try {
       const store = await getUiGuidelinesStore();
+      const count = await store.countEntities();
+      if (count === 0) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: emptyUiDbMessage() }],
+        };
+      }
       const md = await store.exportMarkdownGuidelines();
       return { content: [{ type: "text", text: md }] };
     } catch (e) {
