@@ -1,0 +1,26 @@
+/* Pass case: uses Bufab v2.1 tokens correctly. */
+.header {
+  background: #1f3c46;
+  position: sticky;
+  top: 0;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.cta {
+  background: #E8610A;
+  color: #FFFFFF;
+  border-radius: 0;
+  padding: 11px 24px;
+}
+
+.section {
+  background: #F4F6F8;
+  color: #1A1A1A;
+  border: 1px solid #D0D7DE;
+  padding: 64px 24px;
+}
+
+.value-columns h2 {
+  color: #325c6d;
+  font-weight: 600;
+}
