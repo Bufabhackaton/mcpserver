@@ -160,6 +160,52 @@ Output is JSON:
 The validator never fails — it always exits 0 with a JSON report. The
 *caller* (hook adapter, CI, etc.) decides what to do with the report.
 
+#### Live-loading from `bufab_ui_guidelines.json` *or* the MCP server
+
+The validator's accepted-color palette and the `UserPromptSubmit` reminder
+text are **not hardcoded**. Both are derived at every spawn from one of
+two live sources, selected by `$BUFAB_GUIDELINES_SOURCE`:
+
+- **`file`** (default) — read `bufab_ui_guidelines.json` directly. Fast,
+  offline, no MCP dependency. **Resolution order:**
+  1. `$BUFAB_UI_GUIDELINES_JSON` if set
+  2. Walk up from the script's directory looking for
+     `<dir>/guidelines/bufab_ui_guidelines.json` (or
+     `<dir>/allguidelines/bufab_ui_guidelines.json`, the legacy path)
+  3. Fall back to a hardcoded snapshot baked into the validator
+
+- **`mcp`** — spawn `bufab-mcp/dist/index.js` per validator invocation,
+  call the `ui_export` tool over JSON-RPC, parse the merged guidelines
+  it returns. The MCP rebuilds the document from LanceDB, so rules
+  updated via `ui_upsert` (or any other LanceDB write) propagate to the
+  next hook fire **without committing the JSON file**. Falls back to
+  `file` if the MCP call fails.
+
+Because every hook fire spawns a fresh `node` process, "load on startup"
+effectively means "load on every invocation" — a guideline change lands
+immediately without redeploying anything. Add a new accepted color, add
+a new `strict_constraint` line, `ui_upsert` a new fragment — the next
+file Cline/Cursor/Claude Code writes will already be validated against
+the new rules.
+
+**Trade-off**: `mcp` mode adds ~1-3 s cold start per hook fire (LanceDB
+init + JSON-RPC handshake). For most demo flows this is fine; if it
+shows up in latency, see Pending #4 (cross-spawn cache + fingerprint).
+
+What is **not** auto-loaded: the regex/AST detection logic itself
+(`detectGradients`, `detectHeaderScrollListener`, etc.). Those are code
+because the *check shape* is structural. A genuinely new behavioral
+pattern still needs a new check function.
+
+Environment variables for ops:
+
+| Variable                       | Effect                                                                 |
+| ------------------------------ | ---------------------------------------------------------------------- |
+| `BUFAB_GUIDELINES_SOURCE`      | `file` (default) or `mcp`. Selects the live source.                    |
+| `BUFAB_UI_GUIDELINES_JSON`     | Absolute path to the JSON when in `file` mode. Skips the walk.         |
+| `BUFAB_DISABLE_GUIDELINES=1`   | Forces the hardcoded fallback. Useful for tests and pinned demos.      |
+| `BUFAB_UI_FORCE_RESEED=1`      | (consumed by the MCP server) re-imports the JSON into LanceDB on boot. |
+
 ### Cline adapters (`lib/post-tool-use.mjs`, `lib/user-prompt-submit.mjs`)
 
 `PostToolUse`: Filters down to `write_to_file` and `replace_in_file`. For
@@ -352,40 +398,54 @@ is debug-only and surfaces in the host tool's hook output panel.
    alignment, detect cards-outside-industries-grid, etc. `acorn` or
    `htmlparser2` rather than regex.
 
+### Live guidelines — beyond Layers 1 & 2
+
+Layers 1 (file-based loading) and 2 (`BUFAB_GUIDELINES_SOURCE=mcp` pulls
+from the MCP / LanceDB) are **done**. One layer left from the original
+plan:
+
+3. **Layer 3 — cross-spawn cache + fingerprint.** Today MCP mode pays a
+   ~1-3 s cold start per hook fire (LanceDB init + JSON-RPC handshake).
+   Add a small on-disk cache of the last `ui_export` result keyed by a
+   version/etag the MCP returns; the validator uses the cached snapshot
+   when the etag is unchanged and only re-spawns the MCP on drift. OPA
+   Bundle Service pattern. Worth doing once we see real latency from
+   `mcp` mode in the demo.
+
 ### Reach — catch code that did not pass through any of these hooks
 
-3. **CI safety net.** Replit code never passes through Cline / Cursor /
+4. **CI safety net.** Replit code never passes through Cline / Cursor /
    Claude Code, so none of these hooks fire on it. Add a CI step
    (Azure DevOps Pipelines / GitHub Actions) that runs
    `node bufab-mcp/scripts/validate.mjs $(git diff --name-only ...)`
    on every PR and fails the build if `summary.blockers > 0`. **This
    is the only defense against Replit-generated violations.**
-4. **Pre-commit git hook** (`.git/hooks/pre-commit` or Husky). Catches
+5. **Pre-commit git hook** (`.git/hooks/pre-commit` or Husky). Catches
    violations on the dev's machine regardless of which IDE produced
    them. Also closes the gap of Cursor's `beforeShellExecution` not
    firing for commits done outside Cursor's chat (e.g. from VS Code's
    git UI or a terminal).
-5. **Expose the validator as a `bufab-mcp` MCP tool.** Right now it's
+6. **Expose the validator as a `bufab-mcp` MCP tool.** Right now it's
    only reachable via the hook adapters. A `validate_files(paths[])`
    tool makes it callable from any MCP client.
 
 ### Demo polish
 
-6. **Bash command blocking for Cline and Claude Code.** Mirror Cursor's
+7. **Bash command blocking for Cline and Claude Code.** Mirror Cursor's
    `beforeShellExecution` deny: Cline `PreToolUse` on `execute_command`
    and Claude Code `PreToolUse` matcher `Bash`, both checking for
    `git commit` / `git push` / publish commands when the ledger has
    blockers.
-7. **`BUFAB_HOOK_STRICT=1` toggle.** Flips `PostToolUse` from
+8. **`BUFAB_HOOK_STRICT=1` toggle.** Flips `PostToolUse` from
    `contextModification` (soft-fail) to `cancel: true` / `decision: "block"`
    so the demo can show the tool being blocked outright.
-8. **Task scorecard.** A `TaskComplete` (Cline) / `Stop` (Cursor and
+9. **Task scorecard.** A `TaskComplete` (Cline) / `Stop` (Cursor and
    Claude Code) hook that runs the validator across every file the
    agent touched and emits the per-task score from Part 10 of the
    guideline doc (start at 100, -15 per blocker, -5 per warning).
-9. **Cursor `beforeSubmitPrompt` reminder.** Stdout is informational-only
-   so we can't add to context, but a stderr line surfaces in the Hooks
-   panel for the user. Cheap to try.
+10. **Cursor `beforeSubmitPrompt` reminder.** Stdout is informational-only
+    so we can't add to context, but a stderr line surfaces in the Hooks
+    panel for the user. Cheap to try.
 
 ## Things that are intentionally NOT in scope here
 
@@ -395,4 +455,4 @@ is debug-only and surfaces in the host tool's hook output panel.
   governance, etc.). Those have their own MCP tools (`rules_*`,
   `waf_guidelines`) and would need their own validators.
 - **Replit.** Replit does not expose hooks to anything we control. It is
-  covered by the pending CI safety net (item #3 above) instead.
+  covered by the pending CI safety net (item #4 above) instead.
