@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
+    "postinstall": "node scripts/install-bicep.mjs",
     "verify": "node scripts/mcp-smoke.mjs",
     "verify:ui": "node scripts/ui-seed-verify.mjs",
     "test:validator": "node scripts/validate-test.mjs"

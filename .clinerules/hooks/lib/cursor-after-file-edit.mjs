@@ -17,7 +17,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { readStdin, resolveAgainstWorkspace, runValidator } from "./_core.mjs";
+import { formatBicepValidateHint, readStdin, resolveAgainstWorkspace, runValidator } from "./_core.mjs";
 
 (async () => {
   const raw = await readStdin();
@@ -32,6 +32,9 @@ import { readStdin, resolveAgainstWorkspace, runValidator } from "./_core.mjs";
 
   const filePath = event?.file_path;
   if (!filePath) process.exit(0);
+
+  const bicepHint = formatBicepValidateHint(filePath);
+  if (bicepHint) process.stderr.write(`[bufab] ${filePath}: run bufab-mcp tool bicep_validate before committing\n`);
 
   const workspace = event?.workspace_roots?.[0];
   const absPath = resolveAgainstWorkspace(filePath, workspace);
