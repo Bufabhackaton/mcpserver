@@ -33,58 +33,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // to every hook fire without a code change. Each hook spawns a fresh `node`
 // process, so "load on startup" effectively means "load on every invocation".
 //
-// Source selection via $BUFAB_GUIDELINES_SOURCE (default: "file"):
-//   - "file": read bufab_ui_guidelines.json directly (Layer 1 — fast)
-//   - "mcp":  spawn the bufab-mcp server, call ui_export, parse the result
-//             (Layer 2 — uses LanceDB as runtime source of truth, so rules
-//              updated via ui_upsert reflect immediately without committing
-//              the JSON. Falls back to "file" if the MCP call fails.)
-//
-// Within "file" mode, resolution order is:
-//   1. $BUFAB_UI_GUIDELINES_JSON if set
-//   2. Walk up from this script's dir; at each level try
-//      <dir>/guidelines/bufab_ui_guidelines.json then
-//      <dir>/allguidelines/bufab_ui_guidelines.json (legacy)
-//   3. Fall back to the hardcoded defaults
-//
 // $BUFAB_DISABLE_GUIDELINES=1 short-circuits everything and forces hardcoded.
 // ---------------------------------------------------------------------------
 
-const GUIDELINES_FILENAME = "bufab_ui_guidelines.json";
-const GUIDELINES_DIR_NAMES = ["guidelines", "allguidelines"];
-const GUIDELINES_WALK_LIMIT = 10;
 const MCP_CALL_TIMEOUT_MS = 30000;
 
 let _cachedGuidelines; // undefined = not attempted; null = attempted, missing/invalid
-
-function findGuidelinesJsonPath(startDir) {
-  const fromEnv = process.env.BUFAB_UI_GUIDELINES_JSON;
-  if (fromEnv && existsSync(fromEnv)) return fromEnv;
-  let dir = startDir;
-  for (let i = 0; i < GUIDELINES_WALK_LIMIT; i++) {
-    for (const name of GUIDELINES_DIR_NAMES) {
-      const candidate = join(dir, name, GUIDELINES_FILENAME);
-      if (existsSync(candidate)) return candidate;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
-}
-
-function loadGuidelinesFromFileSync(startDir) {
-  const path = findGuidelinesJsonPath(startDir);
-  if (!path) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf8"));
-  } catch (e) {
-    process.stderr.write(
-      `[bufab] failed to parse ${path}: ${e instanceof Error ? e.message : String(e)}\n`,
-    );
-    return null;
-  }
-}
 
 function loadGuidelinesFromMcp() {
   return new Promise((resolveP, rejectP) => {
@@ -93,15 +47,7 @@ function loadGuidelinesFromMcp() {
       rejectP(new Error(`MCP not built at ${mcpBinary}; run 'npm run build' in bufab-mcp`));
       return;
     }
-    // If the parent doesn't already point at a guidelines JSON, try to find
-    // one via walk-up and pass it to the child so the MCP can auto-seed an
-    // empty LanceDB on first use. The child still works without this if its
-    // LanceDB is already populated.
     const childEnv = { ...process.env };
-    if (!childEnv.BUFAB_UI_GUIDELINES_JSON) {
-      const found = findGuidelinesJsonPath(__dirname);
-      if (found) childEnv.BUFAB_UI_GUIDELINES_JSON = found;
-    }
     const child = spawn(process.execPath, [mcpBinary], {
       stdio: ["pipe", "pipe", "pipe"],
       env: childEnv,
@@ -182,22 +128,19 @@ export async function loadGuidelines(startDir = __dirname) {
     _cachedGuidelines = null;
     return null;
   }
-  const source = (process.env.BUFAB_GUIDELINES_SOURCE || "mcp").toLowerCase();
-  if (source === "mcp") {
-    try {
-      const fromMcp = await loadGuidelinesFromMcp();
-      if (fromMcp) {
-        _cachedGuidelines = fromMcp;
-        return _cachedGuidelines;
-      }
-    } catch (e) {
-      process.stderr.write(
-        `[bufab] MCP source failed (${e instanceof Error ? e.message : String(e)}); falling back to file\n`,
-      );
-    }
+  // MCP is the only supported live source. If it fails, we intentionally fall
+  // back to the hardcoded defaults (no direct JSON file loading in the
+  // validator).
+  try {
+    const fromMcp = await loadGuidelinesFromMcp();
+    _cachedGuidelines = fromMcp ?? null;
+    return _cachedGuidelines;
+  } catch (e) {
+    process.stderr.write(
+      `[bufab] MCP source failed (${e instanceof Error ? e.message : String(e)}); using hardcoded defaults\n`,
+    );
+    _cachedGuidelines = null;
   }
-  const fromFile = loadGuidelinesFromFileSync(startDir);
-  _cachedGuidelines = fromFile ?? null;
   return _cachedGuidelines;
 }
 
@@ -244,20 +187,17 @@ let _tokenHexSet = null;
 function getTokenHexSet() {
   if (_tokenHexSet) return _tokenHexSet;
   // Sync access path. Reads from the pre-warmed cache if available; otherwise
-  // does a sync file load (skipping any MCP source — that has to be warmed
-  // via `await loadGuidelines()` before this runs).
+  // falls back to hardcoded defaults (no JSON file fallback in the validator).
   let g = _cachedGuidelines;
   if (g === undefined) {
-    if (process.env.BUFAB_DISABLE_GUIDELINES !== "1") {
-      g = loadGuidelinesFromFileSync(__dirname);
-    }
-    _cachedGuidelines = g ?? null;
+    _cachedGuidelines = null;
+    g = null;
   }
   if (g) {
     _tokenHexSet = extractAllTokenHex(g);
   } else {
     process.stderr.write(
-      "[bufab] guidelines not loaded; using hardcoded token defaults. Set BUFAB_UI_GUIDELINES_JSON or BUFAB_GUIDELINES_SOURCE=mcp.\n",
+      "[bufab] guidelines not loaded; using hardcoded token defaults. Build and run the MCP server for live guidelines.\n",
     );
     _tokenHexSet = HARDCODED_TOKEN_HEX;
   }

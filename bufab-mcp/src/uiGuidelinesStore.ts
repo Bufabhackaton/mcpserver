@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync, existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { type Connection, connect } from "@lancedb/lancedb";
@@ -44,11 +43,6 @@ function packageRootDir(fromDir: string): string {
 
 function defaultUiDbPath(fromDir: string): string {
   return join(packageRootDir(fromDir), ".lancedb-ui");
-}
-
-function defaultGuidelinesJsonPath(fromDir: string): string {
-  const pkg = packageRootDir(fromDir);
-  return join(pkg, "..", "..", "allguidelines", "bufab_ui_guidelines.json");
 }
 
 let uiEmbedder: TransformersEmbeddingFunction | null = null;
@@ -106,7 +100,7 @@ export type UiFragment = {
   body: string;
 };
 
-/** Split canonical bufab_ui_guidelines.json into Lance rows (fragments only). */
+/** Split a UI guidelines export payload into Lance rows (fragments only). */
 export function splitGuidelinesToFragments(root: Record<string, unknown>): UiFragment[] {
   const out: UiFragment[] = [];
   if (root.meta && typeof root.meta === "object") {
@@ -426,15 +420,6 @@ export class UiGuidelinesStore {
     if (process.env.BUFAB_UI_FORCE_RESEED === "1") {
       await store.clearAll();
     }
-    const n = await store.countEntities();
-    if (n === 0) {
-      const jsonPath = process.env.BUFAB_UI_GUIDELINES_JSON ?? defaultGuidelinesJsonPath(baseDir);
-      if (existsSync(jsonPath)) {
-        const raw = readFileSync(jsonPath, "utf8");
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
-        await store.seedFromFragments(splitGuidelinesToFragments(parsed), "initial seed from JSON");
-      }
-    }
     return store;
   }
 
@@ -467,13 +452,6 @@ export class UiGuidelinesStore {
       n += 1;
     }
     return { inserted: n };
-  }
-
-  async seedFromFile(filePath: string, changeSummary?: string): Promise<{ inserted: number }> {
-    const raw = readFileSync(filePath, "utf8");
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const fragments = splitGuidelinesToFragments(parsed);
-    return this.seedFromFragments(fragments, changeSummary ?? `seed from ${filePath}`);
   }
 
   async listEntities(filters?: { status?: string; domain?: string; kind?: string }): Promise<unknown[]> {
