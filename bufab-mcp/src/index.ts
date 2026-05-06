@@ -1,4 +1,7 @@
 import { readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -57,6 +60,115 @@ function callToolResultToText(result: CallToolResult): string {
     }
   }
   return parts.join("\n");
+}
+
+type CommandRun = {
+  command: string;
+  args: string[];
+  cwd: string;
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+};
+
+async function runCommand(input: {
+  command: string;
+  args: string[];
+  cwd: string;
+  timeoutMs: number;
+  env?: Record<string, string | undefined>;
+}): Promise<CommandRun> {
+  const startedAt = Date.now();
+  return await new Promise<CommandRun>((resolve) => {
+    const child = spawn(input.command, input.args, {
+      cwd: input.cwd,
+      env: { ...process.env, ...(input.env ?? {}) } as NodeJS.ProcessEnv,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout.on("data", (b: Buffer) => stdout.push(b));
+    child.stderr.on("data", (b: Buffer) => stderr.push(b));
+
+    let killedByTimeout = false;
+    const timeout = setTimeout(() => {
+      killedByTimeout = true;
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        /* ignore */
+      }
+    }, input.timeoutMs);
+
+    child.on("close", (code, signal) => {
+      clearTimeout(timeout);
+      const suffix = killedByTimeout ? `\n[bufab-mcp] timed out after ${input.timeoutMs}ms` : "";
+      resolve({
+        command: input.command,
+        args: input.args,
+        cwd: input.cwd,
+        exitCode: code,
+        signal,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8") + suffix,
+        durationMs: Date.now() - startedAt,
+      });
+    });
+
+    child.on("error", (err) => {
+      clearTimeout(timeout);
+      resolve({
+        command: input.command,
+        args: input.args,
+        cwd: input.cwd,
+        exitCode: null,
+        signal: null,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: `${Buffer.concat(stderr).toString("utf8")}\n${err instanceof Error ? err.message : String(err)}`,
+        durationMs: Date.now() - startedAt,
+      });
+    });
+  });
+}
+
+function sanitizeRelativePath(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error("file path is empty");
+  }
+  const normalized = trimmed.replace(/\\/g, "/");
+  if (normalized.startsWith("/")) {
+    throw new Error(`absolute paths are not allowed: ${raw}`);
+  }
+  if (/^[a-zA-Z]:\//.test(normalized)) {
+    throw new Error(`windows drive paths are not allowed: ${raw}`);
+  }
+  const parts = normalized.split("/").filter((p) => p.length > 0);
+  for (const p of parts) {
+    if (p === "." || p === "..") {
+      throw new Error(`path traversal is not allowed: ${raw}`);
+    }
+  }
+  return parts.join("/");
+}
+
+function resolveLocalBicepPath(): string | null {
+  const envPath = process.env.BUFAB_BICEP_PATH?.trim();
+  if (envPath) {
+    return envPath;
+  }
+  const exe = process.platform === "win32" ? "bicep.exe" : "bicep";
+  const vendor = join(__dirname, "..", "vendor", "bicep", exe);
+  return vendor;
+}
+
+async function createTempWorkspaceDir(): Promise<string> {
+  // Prefer a package-local tmp dir (works in sandboxes that restrict writes).
+  const base = join(__dirname, "..", ".tmp");
+  await mkdir(base, { recursive: true });
+  return await mkdtemp(join(base, "bicep-"));
 }
 
 function azureMcpSpawnArgs(): string[] {
@@ -601,6 +713,170 @@ server.registerTool(
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       return { isError: true, content: [{ type: "text", text: message }] };
+    }
+  },
+);
+
+server.registerTool(
+  "bicep_validate",
+  {
+    title: "Validate Bicep via CLI",
+    description:
+      "Writes provided Bicep-related files into a temporary workspace, then runs `bicep build` and `bicep lint` against one or more entrypoints. Returns CLI outputs and exit codes.",
+    inputSchema: {
+      files: z
+        .array(
+          z.object({
+            path: z
+              .string()
+              .describe(
+                "Relative path to write (e.g. infra/main.bicep, modules/vnet.bicep, bicepconfig.json). Must not be absolute and must not contain '..'.",
+              ),
+            content: z.string().describe("File contents (UTF-8)."),
+          }),
+        )
+        .min(1)
+        .describe("All files needed for validation (modules, params, config, etc.)."),
+      entrypoints: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Relative paths to the Bicep files to validate (e.g. [\"infra/main.bicep\"]). If omitted, validates all provided *.bicep files.",
+        ),
+      keep_temp_dir: z
+        .boolean()
+        .optional()
+        .describe("If true, does not delete the temp dir (useful for debugging). Default false."),
+      timeout_ms: z
+        .number()
+        .int()
+        .min(1000)
+        .max(10 * 60 * 1000)
+        .optional()
+        .describe("Per-command timeout in ms. Default 60000."),
+    },
+  },
+  async (args) => {
+    const timeoutMs = args.timeout_ms ?? 60000;
+    const keep = args.keep_temp_dir === true;
+
+    let tempDir: string | null = null;
+    try {
+      // os.tmpdir() isn't always writable under sandboxing; use package-local tmp.
+      tempDir = await createTempWorkspaceDir();
+
+      const bicepCommand = resolveLocalBicepPath() ?? "bicep";
+      const bicepEnv = {
+        // Bicep is a single-file .NET bundle and needs a writable extraction dir.
+        DOTNET_BUNDLE_EXTRACT_BASE_DIR: join(tempDir, ".dotnet-bundle"),
+        // Some environments don't provide a writable HOME; keep it inside temp.
+        HOME: tempDir,
+      } as const;
+
+      // Write all files
+      for (const f of args.files) {
+        const rel = sanitizeRelativePath(f.path);
+        const abs = join(tempDir, rel);
+        await mkdir(dirname(abs), { recursive: true });
+        await writeFile(abs, f.content, "utf8");
+      }
+
+      const allBicepFiles = args.files
+        .map((f) => sanitizeRelativePath(f.path))
+        .filter((p) => p.toLowerCase().endsWith(".bicep"));
+
+      const entrypoints = (args.entrypoints?.length ? args.entrypoints : allBicepFiles).map((p) =>
+        sanitizeRelativePath(p),
+      );
+
+      if (entrypoints.length === 0) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text:
+                "No entrypoints to validate. Provide `entrypoints` or include at least one `*.bicep` file in `files`.",
+            },
+          ],
+        };
+      }
+
+      // Verify CLI exists early (clear error message).
+      const versionRun = await runCommand({
+        command: bicepCommand,
+        args: ["--version"],
+        cwd: tempDir,
+        timeoutMs,
+        env: bicepEnv,
+      });
+      if (versionRun.exitCode !== 0) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  ok: false,
+                  error:
+                    "Bicep CLI not available (or failed to run). Either install Bicep (Azure CLI: `az bicep install`) or rely on the package-local install via `npm install` (postinstall). You can also set BUFAB_BICEP_PATH.",
+                  attempted_command: bicepCommand,
+                  probe: versionRun,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+
+      const outDir = join(tempDir, "_bicep_out");
+      await mkdir(outDir, { recursive: true });
+
+      const perFile: Array<{
+        entrypoint: string;
+        build: CommandRun;
+        lint: CommandRun;
+      }> = [];
+
+      for (const ep of entrypoints) {
+        const build = await runCommand({
+          command: bicepCommand,
+          args: ["build", ep, "--outdir", "_bicep_out"],
+          cwd: tempDir,
+          timeoutMs,
+          env: bicepEnv,
+        });
+        const lint = await runCommand({
+          command: bicepCommand,
+          args: ["lint", ep],
+          cwd: tempDir,
+          timeoutMs,
+          env: bicepEnv,
+        });
+        perFile.push({ entrypoint: ep, build, lint });
+      }
+
+      const ok = perFile.every((r) => (r.build.exitCode ?? 1) === 0 && (r.lint.exitCode ?? 1) === 0);
+
+      const result = {
+        ok,
+        temp_dir: keep ? tempDir : undefined,
+        bicep_version: versionRun.stdout.trim() || versionRun.stderr.trim(),
+        entrypoints,
+        results: perFile,
+      };
+
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    } finally {
+      if (tempDir && !keep) {
+        await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+      }
     }
   },
 );

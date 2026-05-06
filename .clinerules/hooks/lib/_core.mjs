@@ -134,30 +134,21 @@ export function formatViolationReport(displayPath, result) {
   return lines.join("\n");
 }
 
-// Hardcoded fallback used only when the guidelines JSON is missing. The
-// preferred path is buildReminderFromGuidelines() which derives the reminder
-// from ui_rules.strict_constraints in the live JSON.
-const HARDCODED_REMINDER = `[Bufab UI guidelines are active in this repo]
-Blockers (each violation is a -15 score penalty; PR cannot merge):
-- AP-03  no gradients anywhere (linear-gradient, radial-gradient, conic-gradient)
-- AP-04  accent #E8610A only as CTA button background, never as text/border/icon
-- AP-05  no web fonts; system stack only ('Helvetica Neue', Helvetica, Arial, sans-serif)
-- AP-06  border-radius max 2px (4px allowed only inside industries-grid tiles)
-- AP-07  header background must always be #1f3c46 - no scroll-driven color change
-- AP-08  no scroll listeners or .scrolled classes on the header
-- AP-01  hero text must be left-aligned, never centered
-- AP-02  cards/tiles only inside industries-grid; nowhere else
-- COLOR-03 only the Bufab token palette; no ad-hoc hex colors
-
-Before writing UI code, call the bufab-mcp tools:
-- ui_section_spec(section_type) for the section you are about to build
-- ui_token(name) for any color or spacing value
-- ui_search(query) for anything not covered by the two above
-
-A post-write hook will validate every file you write/edit and feed back any
-violations it finds. Treat that feedback as a build error - fix and re-edit.
-
-Full reference: guidelines/bufab_ui_guidelines.md`;
+function missingGuidelinesReminder(details) {
+  const lines = [
+    "[Bufab UI guidelines reminder unavailable]",
+    "",
+    "Live UI guidelines could not be loaded from the MCP server (ui_export).",
+    details ? `Reason: ${details}` : null,
+    "",
+    "Fix:",
+    "- build bufab-mcp (`npm -C bufab-mcp run build`)",
+    "- seed UI LanceDB via `ui_upsert` (or ensure BUFAB_UI_DB_PATH points at a populated DB)",
+    "",
+    "Until this is fixed, treat UI work as blocked (the validator also depends on live MCP guidelines).",
+  ].filter(Boolean);
+  return lines.join("\n");
+}
 
 function buildReminderFromGuidelines(guidelines) {
   const constraints = guidelines?.ui_rules?.strict_constraints;
@@ -189,13 +180,40 @@ function buildReminderFromGuidelines(guidelines) {
 // If live loading fails (MCP unavailable, empty UI DB, etc.), do not crash hook
 // module initialization — fall back to the static reminder text.
 let _g = null;
+let _gError = null;
 try {
   _g = await loadGuidelines();
 } catch (e) {
-  process.stderr.write(
-    `[bufab] warning: failed to load live guidelines for reminder text; using hardcoded reminder (${
-      e instanceof Error ? e.message : String(e)
-    })\n`,
-  );
+  _gError = e instanceof Error ? e.message : String(e);
+  process.stderr.write(`[bufab] error: failed to load live guidelines for reminder text (${_gError})\n`);
 }
-export const BUFAB_REMINDER = buildReminderFromGuidelines(_g) ?? HARDCODED_REMINDER;
+export const BUFAB_REMINDER = buildReminderFromGuidelines(_g) ?? missingGuidelinesReminder(_gError);
+
+// Add a short infra reminder (kept static to avoid doing filesystem scans in hooks).
+export const BUFAB_INFRA_REMINDER =
+  "\n\n[Bufab infrastructure note]\n" +
+  "When generating or editing Azure Bicep infrastructure, validate with bufab-mcp `bicep_validate`.\n" +
+  "Provide all required files (main, modules, *.bicepparam, bicepconfig.json) so `bicep build` and `bicep lint` can resolve imports.";
+
+export const BUFAB_WAF_REMINDER =
+  "\n\n[Azure Well-Architected Framework (WAF) check]\n" +
+  "Before finalizing infrastructure decisions, consult WAF guidance via bufab-mcp `waf_guidelines` for the relevant Azure service (or omit `service` to list supported services).\n" +
+  "Also review internal overlay via `rules_get(slug=bufab-infrastructure-context-overlay)` to ensure Bufab-specific requirements are met.";
+
+export const BUFAB_MCP_INFRA_REMINDER =
+  "\n\n[Bufab MCP infrastructure recommendations]\n" +
+  "Before finalizing or shipping infrastructure, consult Bufab's infra overlay stored in MCP via `rules_get(slug=bufab-infrastructure-context-overlay)` (or `rules_search(query=...)` for specific topics like tags, naming, secrets, networking).\n" +
+  "Treat those rules as the source of truth for internal recommendations on top of WAF.";
+
+export function isBicepRelatedPath(filePath) {
+  const p = String(filePath ?? "").toLowerCase();
+  return p.endsWith(".bicep") || p.endsWith(".bicepparam") || p.endsWith("bicepconfig.json");
+}
+
+export function formatBicepValidateHint(filePath) {
+  if (!isBicepRelatedPath(filePath)) return null;
+  return [
+    "Bicep files were edited in this turn.",
+    "Before you consider the infrastructure work done, run `bicep_validate` with all required files (modules, params, bicepconfig.json) and check both `bicep build` and `bicep lint` results.",
+  ].join("\n");
+}

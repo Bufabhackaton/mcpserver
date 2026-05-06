@@ -31,6 +31,8 @@ bin/
 ### Node (Bufab MCP) ###
 bufab-mcp/node_modules/
 bufab-mcp/dist/
+bufab-mcp/.tmp/
+bufab-mcp/vendor/bicep/
 #bufab-mcp/.lancedb/
 #bufab-mcp/.lancedb-ui/
 
