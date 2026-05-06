@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { type Connection, connect } from "@lancedb/lancedb";
@@ -100,7 +99,6 @@ export type UiFragment = {
   domain: string;
   body: string;
 };
-
 const SECTION_TYPE_TO_SLUG: Record<string, string> = {
   layout: "layout",
   header: "component-header",
