@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readdir, readFile, stat } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -104,6 +105,64 @@ async function fetchAzureWafGuidance(service: string | undefined): Promise<CallT
 
 const bufabAppendix = loadBufabAppendix();
 
+type SetupEnvFile = {
+  /** Path relative to the target project root (e.g. ".cursor/hooks.json"). */
+  path: string;
+  /** File contents encoded as base64. */
+  content_base64: string;
+  /** Whether file is executable on the server filesystem (best-effort hint). */
+  executable: boolean;
+};
+
+async function listFilesRecursive(rootAbs: string, relBase = ""): Promise<string[]> {
+  const entries = await readdir(rootAbs, { withFileTypes: true });
+  const out: string[] = [];
+  for (const e of entries) {
+    const rel = relBase ? `${relBase}/${e.name}` : e.name;
+    const abs = join(rootAbs, e.name);
+    if (e.isDirectory()) {
+      out.push(...(await listFilesRecursive(abs, rel)));
+    } else if (e.isFile()) {
+      out.push(rel);
+    }
+  }
+  return out;
+}
+
+async function exportSetupEnvironment(sourceDirAbs: string): Promise<{
+  source_dir: string;
+  files: SetupEnvFile[];
+}> {
+  const roots = [".claude", ".clinerules", ".cursor"];
+  const files: SetupEnvFile[] = [];
+
+  for (const root of roots) {
+    const rootAbs = join(sourceDirAbs, root);
+    // If a folder is missing, just skip it; the caller can decide whether that's acceptable.
+    try {
+      const s = await stat(rootAbs);
+      if (!s.isDirectory()) continue;
+    } catch {
+      continue;
+    }
+
+    const relPaths = await listFilesRecursive(rootAbs, root);
+    for (const rel of relPaths) {
+      const abs = join(sourceDirAbs, rel);
+      const buf = await readFile(abs);
+      const st = await stat(abs);
+      files.push({
+        path: rel,
+        content_base64: buf.toString("base64"),
+        executable: (st.mode & 0o111) !== 0,
+      });
+    }
+  }
+
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  return { source_dir: sourceDirAbs, files };
+}
+
 const server = new McpServer(
   {
     name: "bufab-mcp",
@@ -112,6 +171,34 @@ const server = new McpServer(
   {
     instructions:
       "Tools: (1) waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) rules_* — infrastructure rules in LanceDB (.lancedb). (3) ui_* (including ui_section_spec, ui_token, ui_export, ui_export_markdown) — UI guidelines fragments in LanceDB (.lancedb-ui), seeded from bufab_ui_guidelines.json. Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_GUIDELINES_JSON, BUFAB_UI_FORCE_RESEED=1 to re-import JSON. First embedding use downloads MiniLM via @huggingface/transformers.",
+  },
+);
+
+server.registerTool(
+  "setup_environment",
+  {
+    title: "Setup environment (remote-safe export)",
+    description:
+      "Remote-safe: exports .claude/.clinerules/.cursor from a source directory as JSON (base64 file contents) so a local client can write them into a project. This tool does not modify any files.",
+    inputSchema: {
+      source_dir: z
+        .string()
+        .optional()
+        .describe("Directory to export from. Defaults to the MCP server process cwd."),
+    },
+  },
+  async ({ source_dir }) => {
+    try {
+      const src = resolve(process.cwd(), source_dir ?? ".");
+      const payload = await exportSetupEnvironment(src);
+      return { content: [{ type: "text", text: jsonText(payload) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return {
+        isError: true,
+        content: [{ type: "text", text: message }],
+      };
+    }
   },
 );
 

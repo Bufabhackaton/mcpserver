@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { type Connection, connect } from "@lancedb/lancedb";
@@ -43,6 +44,16 @@ function packageRootDir(fromDir: string): string {
 
 function defaultUiDbPath(fromDir: string): string {
   return join(packageRootDir(fromDir), ".lancedb-ui");
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    const { stat } = await import("node:fs/promises");
+    const s = await stat(path);
+    return s.isFile();
+  } catch {
+    return false;
+  }
 }
 
 let uiEmbedder: TransformersEmbeddingFunction | null = null;
@@ -419,6 +430,20 @@ export class UiGuidelinesStore {
     const store = new UiGuidelinesStore(conn);
     if (process.env.BUFAB_UI_FORCE_RESEED === "1") {
       await store.clearAll();
+      const jsonPath = process.env.BUFAB_UI_GUIDELINES_JSON;
+      if (!jsonPath?.trim()) {
+        throw new Error(
+          "BUFAB_UI_FORCE_RESEED=1 was set, but BUFAB_UI_GUIDELINES_JSON is missing. Refusing to leave the UI DB empty.",
+        );
+      }
+      if (!(await fileExists(jsonPath))) {
+        throw new Error(
+          `BUFAB_UI_FORCE_RESEED=1 was set, but BUFAB_UI_GUIDELINES_JSON does not exist at: ${jsonPath}`,
+        );
+      }
+      const raw = await readFile(jsonPath, "utf8");
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      await store.seedFromFragments(splitGuidelinesToFragments(parsed), `force reseed from ${jsonPath}`);
     }
     return store;
   }
