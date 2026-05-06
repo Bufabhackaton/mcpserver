@@ -199,43 +199,28 @@ cd bufab-mcp
 npm run test:validator
 ```
 
-The runner forces `BUFAB_GUIDELINES_SOURCE=file` so results stay stable
-against the JSON committed to the guidelines repo, regardless of any
-local LanceDB drift. Exits non-zero on first mismatch — suitable for
-CI (Pending #6).
+The runner uses live MCP guidelines (`ui_export`). This requires a built
+`bufab-mcp` server and populated UI LanceDB (`ui_upsert` fragments).
+Exits non-zero on first mismatch — suitable for CI.
 
 When you add a new check to the validator, add a fixture that
 exercises it and a case row in `validate-test.mjs`. Same flow for
 adding new accepted-color tokens or new strict_constraints — update
 the corresponding `*-good` fixture to use them.
 
-#### Live-loading from the MCP (default) *or* the JSON file
+#### Live-loading from the MCP (default)
 
 The validator's accepted-color palette and the `UserPromptSubmit` reminder
-text are **not hardcoded**. Both are derived at every spawn from one of
-two live sources, selected by `$BUFAB_GUIDELINES_SOURCE`:
+text are **not hardcoded**. They are derived at every spawn from the
+live MCP export:
 
 - **`mcp`** *(default)* — spawn `bufab-mcp/dist/index.js` per validator
   invocation, call the `ui_export` tool over JSON-RPC, parse the merged
   guidelines it returns. The MCP rebuilds the document from LanceDB, so
   rules updated via `ui_upsert` (or any other LanceDB write) propagate
-  to the next hook fire **without committing the JSON file**. If the
-  validator can find a `bufab_ui_guidelines.json` via walk-up, it
-  passes that path to the MCP child as `BUFAB_UI_GUIDELINES_JSON` so
-  the MCP can auto-seed an empty LanceDB on first use.
-
-- **`file`** — read `bufab_ui_guidelines.json` directly. Faster (no MCP
-  spawn), offline, no MCP dependency. **Resolution order:**
-  1. `$BUFAB_UI_GUIDELINES_JSON` if set
-  2. Walk up from the script's directory looking for
-     `<dir>/guidelines/bufab_ui_guidelines.json` (or
-     `<dir>/allguidelines/bufab_ui_guidelines.json`, the legacy path)
-  3. Fall back to a hardcoded snapshot baked into the validator
-
-If `mcp` mode fails (binary not built, server crash, etc.), the loader
-**automatically falls back** to `file` mode and writes a notice on
-stderr. So a fresh clone that hasn't run `npm install && npm run build`
-in `bufab-mcp/` still gets working enforcement against the JSON file.
+  to the next hook fire without any repo file sync step.
+If `mcp` mode fails (binary not built, server crash, empty UI LanceDB, etc.),
+the validator fails fast (exit 2). No fallback token set is used.
 
 Because every hook fire spawns a fresh `node` process, "load on startup"
 effectively means "load on every invocation" — a guideline change lands
@@ -246,8 +231,7 @@ the new rules.
 
 **Trade-off of the `mcp` default**: ~1-3 s cold start per hook fire
 (LanceDB init + JSON-RPC handshake). Acceptable for typical demo flows;
-if it shows up in latency, see Pending #3 (cross-spawn cache +
-fingerprint) or set `BUFAB_GUIDELINES_SOURCE=file` to skip the spawn.
+if it shows up in latency, see Pending #3 (cross-spawn cache + fingerprint).
 
 What is **not** auto-loaded: the regex/AST detection logic itself
 (`detectGradients`, `detectHeaderScrollListener`, etc.). Those are code
@@ -258,10 +242,7 @@ Environment variables for ops:
 
 | Variable                       | Effect                                                                 |
 | ------------------------------ | ---------------------------------------------------------------------- |
-| `BUFAB_GUIDELINES_SOURCE`      | `mcp` (default) or `file`. Selects the live source.                    |
-| `BUFAB_UI_GUIDELINES_JSON`     | Absolute path to the JSON. Used by `file` mode and propagated to the MCP child for auto-seeding. |
-| `BUFAB_DISABLE_GUIDELINES=1`   | Forces the hardcoded fallback. Useful for tests and pinned demos.      |
-| `BUFAB_UI_FORCE_RESEED=1`      | (consumed by the MCP server) re-imports the JSON into LanceDB on boot. |
+| `BUFAB_UI_FORCE_RESEED=1`      | (consumed by the MCP server) clears UI rows in LanceDB on boot.        |
 
 ### Cline adapters (`lib/post-tool-use.mjs`, `lib/user-prompt-submit.mjs`)
 
@@ -462,15 +443,14 @@ is debug-only and surfaces in the host tool's hook output panel.
    doing once we see real infra files in the demo.
 4. **Data-driven INFRA rules from `.lancedb` / `rules_*`.** Right now
    the INFRA detection logic is hardcoded regex; only the rule body
-   text is fetched on demand via `rules_get`. Mirror the Layer 1/2
-   pattern from the UI side so an `INFRA-04 forbidden-SKU` rule can
+   text is fetched on demand via `rules_get`. Mirror the UI live-MCP
+   loading pattern so an `INFRA-04 forbidden-SKU` rule can
    be added by `rules_upsert` without a code change. Requires adopting
    a structured "rule packet" shape (regex + severity + message + slug).
 
-### Live guidelines — beyond Layers 1 & 2
+### Live guidelines — next step
 
-Layers 1 (file-based loading) and 2 (`BUFAB_GUIDELINES_SOURCE=mcp` pulls
-from the MCP / LanceDB) are **done** for UI guidelines. One layer left
+Strict-only live MCP loading is **done** for UI guidelines. One layer left
 from the original plan:
 
 5. **Layer 3 — cross-spawn cache + fingerprint.** Today MCP mode pays a

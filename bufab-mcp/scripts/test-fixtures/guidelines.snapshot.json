@@ -1,0 +1,22 @@
+{
+  "meta": {
+    "version": "test-snapshot"
+  },
+  "ui_rules": {
+    "style": {
+      "colors": {
+        "primary": "#1f3c46",
+        "primary_dark": "#0D3349",
+        "secondary": "#325c6d",
+        "accent": "#E8610A",
+        "accent_dark": "#C4520A",
+        "background": "#F4F6F8",
+        "text": "#1A1A1A",
+        "border": "#D0D7DE",
+        "white": "#FFFFFF",
+        "black": "#000000",
+        "muted": "#5C6B7A"
+      }
+    }
+  }
+}
