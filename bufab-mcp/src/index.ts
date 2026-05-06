@@ -186,9 +186,9 @@ const server = new McpServer(
 server.registerTool(
   "setup_environment",
   {
-    title: "Setup environment (remote-safe export)",
+    title: "Setup environment (export project config)",
     description:
-      "Remote-safe: exports .claude/.clinerules/.cursor from a source directory as JSON (base64 file contents) so a local client can write them into a project. This tool does not modify any files.",
+      "Exports .claude/.clinerules/.cursor from a source directory as JSON (base64 file contents) so a client can apply them to set up a project. This tool does not modify any files.",
     inputSchema: {
       source_dir: z
         .string()
