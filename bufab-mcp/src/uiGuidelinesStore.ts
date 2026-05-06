@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { type Connection, connect } from "@lancedb/lancedb";
@@ -44,11 +44,6 @@ function packageRootDir(fromDir: string): string {
 
 function defaultUiDbPath(fromDir: string): string {
   return join(packageRootDir(fromDir), ".lancedb-ui");
-}
-
-function defaultGuidelinesJsonPath(fromDir: string): string {
-  const pkg = packageRootDir(fromDir);
-  return join(pkg, "..", "..", "allguidelines", "bufab_ui_guidelines.json");
 }
 
 let uiEmbedder: TransformersEmbeddingFunction | null = null;
@@ -105,174 +100,6 @@ export type UiFragment = {
   domain: string;
   body: string;
 };
-
-/** Split canonical bufab_ui_guidelines.json into Lance rows (fragments only). */
-export function splitGuidelinesToFragments(root: Record<string, unknown>): UiFragment[] {
-  const out: UiFragment[] = [];
-  if (root.meta && typeof root.meta === "object") {
-    out.push({
-      slug: "spec-meta",
-      title: "Spec metadata",
-      kind: "json_fragment",
-      domain: "meta",
-      body: JSON.stringify(root.meta),
-    });
-  }
-  const ur = root.ui_rules as Record<string, unknown> | undefined;
-  if (!ur) {
-    return out;
-  }
-  if (ur.layout) {
-    out.push({
-      slug: "layout",
-      title: "Page layout",
-      kind: "json_fragment",
-      domain: "layout",
-      body: JSON.stringify(ur.layout),
-    });
-  }
-  const comp = ur.components as Record<string, unknown> | undefined;
-  if (comp) {
-    if (comp.header) {
-      out.push({
-        slug: "component-header",
-        title: "Header component",
-        kind: "json_fragment",
-        domain: "component",
-        body: JSON.stringify(comp.header),
-      });
-    }
-    if (comp.hero) {
-      out.push({
-        slug: "section-hero",
-        title: "Hero section",
-        kind: "json_fragment",
-        domain: "section",
-        body: JSON.stringify(comp.hero),
-      });
-    }
-    if (comp.footer) {
-      out.push({
-        slug: "component-footer",
-        title: "Footer component",
-        kind: "json_fragment",
-        domain: "component",
-        body: JSON.stringify(comp.footer),
-      });
-    }
-    const sections = comp.sections as Record<string, unknown> | undefined;
-    const types = sections?.types as Record<string, unknown> | undefined;
-    if (types) {
-      for (const [key, val] of Object.entries(types)) {
-        const slug = `section-${key}`;
-        out.push({
-          slug,
-          title: `Section type: ${key}`,
-          kind: "json_fragment",
-          domain: "section",
-          body: JSON.stringify(val),
-        });
-      }
-    }
-  }
-  const style = ur.style as Record<string, unknown> | undefined;
-  if (style) {
-    if (style.colors) {
-      out.push({
-        slug: "tokens-colors",
-        title: "Color tokens",
-        kind: "json_fragment",
-        domain: "tokens",
-        body: JSON.stringify(style.colors),
-      });
-    }
-    if (style.typography) {
-      out.push({
-        slug: "tokens-typography",
-        title: "Typography",
-        kind: "json_fragment",
-        domain: "tokens",
-        body: JSON.stringify(style.typography),
-      });
-    }
-    if (style.spacing) {
-      out.push({
-        slug: "tokens-spacing",
-        title: "Spacing",
-        kind: "json_fragment",
-        domain: "tokens",
-        body: JSON.stringify(style.spacing),
-      });
-    }
-    if (style.borders_and_radius) {
-      out.push({
-        slug: "tokens-borders",
-        title: "Borders and radius",
-        kind: "json_fragment",
-        domain: "tokens",
-        body: JSON.stringify(style.borders_and_radius),
-      });
-    }
-    if (style.shadows) {
-      out.push({
-        slug: "tokens-shadows",
-        title: "Shadows",
-        kind: "json_fragment",
-        domain: "tokens",
-        body: JSON.stringify(style.shadows),
-      });
-    }
-    if (style.buttons) {
-      out.push({
-        slug: "tokens-buttons",
-        title: "Buttons",
-        kind: "json_fragment",
-        domain: "tokens",
-        body: JSON.stringify(style.buttons),
-      });
-    }
-    if (style.visual_tone !== undefined || style.anti_tone !== undefined) {
-      out.push({
-        slug: "tokens-tone",
-        title: "Visual tone",
-        kind: "json_fragment",
-        domain: "tokens",
-        body: JSON.stringify({
-          visual_tone: style.visual_tone,
-          anti_tone: style.anti_tone,
-        }),
-      });
-    }
-  }
-  if (ur.imagery) {
-    out.push({
-      slug: "imagery",
-      title: "Imagery",
-      kind: "json_fragment",
-      domain: "content",
-      body: JSON.stringify(ur.imagery),
-    });
-  }
-  if (ur.strict_constraints) {
-    out.push({
-      slug: "constraints-strict",
-      title: "Strict constraints",
-      kind: "json_fragment",
-      domain: "policy",
-      body: JSON.stringify(ur.strict_constraints),
-    });
-  }
-  if (ur.final_check) {
-    out.push({
-      slug: "checklist-final",
-      title: "Final checklist",
-      kind: "json_fragment",
-      domain: "policy",
-      body: JSON.stringify(ur.final_check),
-    });
-  }
-  return out;
-}
 
 const SECTION_TYPE_TO_SLUG: Record<string, string> = {
   layout: "layout",
@@ -426,15 +253,6 @@ export class UiGuidelinesStore {
     if (process.env.BUFAB_UI_FORCE_RESEED === "1") {
       await store.clearAll();
     }
-    const n = await store.countEntities();
-    if (n === 0) {
-      const jsonPath = process.env.BUFAB_UI_GUIDELINES_JSON ?? defaultGuidelinesJsonPath(baseDir);
-      if (existsSync(jsonPath)) {
-        const raw = readFileSync(jsonPath, "utf8");
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
-        await store.seedFromFragments(splitGuidelinesToFragments(parsed), "initial seed from JSON");
-      }
-    }
     return store;
   }
 
@@ -450,30 +268,6 @@ export class UiGuidelinesStore {
     await chunks.delete("id != ''");
     await versions.delete("id != ''");
     await entities.delete("id != ''");
-  }
-
-  async seedFromFragments(fragments: UiFragment[], changeSummary: string): Promise<{ inserted: number }> {
-    let n = 0;
-    for (const f of fragments) {
-      await this.upsertEntity({
-        slug: f.slug,
-        title: f.title,
-        kind: f.kind,
-        domain: f.domain,
-        body: f.body,
-        change_summary: changeSummary,
-        status: "active",
-      });
-      n += 1;
-    }
-    return { inserted: n };
-  }
-
-  async seedFromFile(filePath: string, changeSummary?: string): Promise<{ inserted: number }> {
-    const raw = readFileSync(filePath, "utf8");
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const fragments = splitGuidelinesToFragments(parsed);
-    return this.seedFromFragments(fragments, changeSummary ?? `seed from ${filePath}`);
   }
 
   async listEntities(filters?: { status?: string; domain?: string; kind?: string }): Promise<unknown[]> {
@@ -783,7 +577,7 @@ export class UiGuidelinesStore {
     return { path: pathStr || parsed.slug, value };
   }
 
-  /** Merge current fragments into bufab_ui_guidelines.json shape. */
+  /** Merge current fragments into the canonical guidelines object shape. */
   async exportMergedGuidelines(): Promise<Record<string, unknown>> {
     const entities = await this.conn.openTable(T_ENTITIES);
     const versions = await this.conn.openTable(T_VERSIONS);

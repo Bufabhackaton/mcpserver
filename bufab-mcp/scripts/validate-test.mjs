@@ -5,9 +5,8 @@
  * Runs the validator against each fixture in ./test-fixtures and asserts the
  * expected violations are present (and unexpected blockers are not).
  *
- * Forces BUFAB_GUIDELINES_SOURCE=file so results stay deterministic against
- * the JSON committed to the guidelines repo (the LanceDB content is per
- * machine and may drift).
+ * Uses a fixed guideline snapshot so results are deterministic and do not
+ * depend on local MCP/LanceDB runtime state.
  *
  * Exit code: 0 on success, 1 if any case fails. Suitable for CI.
  */
@@ -18,6 +17,7 @@ import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const VALIDATOR = join(__dirname, "validate.mjs");
 const FIXTURES = join(__dirname, "test-fixtures");
+const SNAPSHOT = join(FIXTURES, "guidelines.snapshot.json");
 
 /** @type {{ name: string, fixture: string, expectBlockers: string[], expectWarnings: string[] }[]} */
 const cases = [
@@ -65,11 +65,16 @@ const cases = [
 function runOne(c) {
   const filePath = join(FIXTURES, c.fixture);
   const result = spawnSync(process.execPath, [VALIDATOR, filePath], {
-    env: { ...process.env, BUFAB_GUIDELINES_SOURCE: "file" },
+    env: { ...process.env, BUFAB_VALIDATOR_GUIDELINES_FILE: SNAPSHOT },
     encoding: "utf8",
   });
   if (result.status !== 0) {
-    return { ok: false, reason: `validator exited ${result.status}\n${result.stderr}` };
+    return {
+      ok: false,
+      reason:
+        `validator exited ${result.status}\n${result.stderr}\n` +
+        "Ensure the test snapshot exists and is valid JSON.",
+    };
   }
   let report;
   try {

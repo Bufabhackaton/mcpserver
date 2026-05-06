@@ -4,7 +4,7 @@ MCP (Model Context Protocol) server that exposes:
 
 1. **`waf_guidelines`** — Azure Well-Architected Framework guidance via the official [`@azure/mcp`](https://www.npmjs.com/package/@azure/mcp) child process, plus a static Bufab overlay from `data/bufab-infrastructure-appendix.md` when present.
 2. **Infrastructure rules** — LanceDB-backed CRUD and semantic search (`rules_*`).
-3. **UI guidelines** — LanceDB-backed fragments seeded from `bufab_ui_guidelines.json`, with helpers for sections, tokens, and export (`ui_*`, including `ui_section_spec`, `ui_token`, `ui_export`, `ui_export_markdown`).
+3. **UI guidelines** — LanceDB-backed fragments managed via MCP tools (`ui_*`, including `ui_section_spec`, `ui_token`, `ui_export`, `ui_export_markdown`).
 
 Transport: **stdio** (standard MCP over stdin/stdout).
 --
@@ -55,14 +55,14 @@ Add a server entry pointing at the built `dist/index.js`. Example (from the pare
       "command": "node",
       "args": ["${workspaceFolder}/bufab-mcp/dist/index.js"],
       "env": {
-        "BUFAB_UI_GUIDELINES_JSON": "${workspaceFolder}/../allguidelines/bufab_ui_guidelines.json"
+        "BUFAB_UI_FORCE_RESEED": "0"
       }
     }
   }
 }
 ```
 
-Use **absolute paths** if your client does not expand variables. Adjust `BUFAB_UI_GUIDELINES_JSON` to the real location of `bufab_ui_guidelines.json`.
+Use **absolute paths** if your client does not expand variables.
 
 ### Other clients
 
@@ -72,15 +72,22 @@ Use `command`: `node`, `args`: `["/absolute/path/to/bufab-mcp/dist/index.js"]`, 
 
 | Variable | Description |
 |----------|-------------|
-| `BUFAB_UI_GUIDELINES_JSON` | Path to `bufab_ui_guidelines.json` used to seed or re-seed the UI LanceDB. If unset, the code uses a default relative path (sibling `allguidelines` layout). |
 | `BUFAB_UI_DB_PATH` | UI guidelines LanceDB directory. Default: `<package>/.lancedb-ui`. |
 | `BUFAB_RULES_DB_PATH` | Infrastructure rules LanceDB directory. Default: `<package>/.lancedb`. |
-| `BUFAB_UI_FORCE_RESEED` | Set to `1` to force re-import from `BUFAB_UI_GUIDELINES_JSON` into the UI database. |
+| `BUFAB_UI_FORCE_RESEED` | Set to `1` to clear existing UI guideline rows on startup (useful before rebuilding via `ui_upsert`). |
 | `BUFAB_EMBEDDING_MODEL` | Embedding model id for rules (default `Xenova/all-MiniLM-L6-v2`). |
 | `BUFAB_UI_EMBEDDING_MODEL` | Overrides the UI embedding model; falls back to `BUFAB_EMBEDDING_MODEL` then the same default. |
 | `BUFAB_AZURE_MCP_COMMAND` | Command to spawn the Azure MCP child (default `npx`). |
 | `BUFAB_AZURE_MCP_PACKAGE` | Package passed to npx (default `@azure/mcp@latest`). |
 | `BUFAB_AZURE_MCP_SERVER_ARGS` | Extra whitespace-separated arguments appended to the Azure MCP `server start` invocation. |
+
+## UI data bootstrap behavior
+
+UI LanceDB starts empty by design (no implicit seed from JSON files).
+
+- On a fresh workspace, `ui_export` and `ui_export_markdown` return an error until you add fragments.
+- Populate data explicitly using `ui_upsert` (one or more fragments such as `spec-meta`, `layout`, `section-*`, `tokens-*`).
+- `BUFAB_UI_FORCE_RESEED=1` only clears existing UI rows on startup; it does not auto-import data.
 
 ## Tools
 
@@ -99,7 +106,7 @@ Use `command`: `node`, `args`: `["/absolute/path/to/bufab-mcp/dist/index.js"]`, 
 | `ui_search` | Semantic search over UI guideline chunks. |
 | `ui_section_spec` | JSON spec for a section/layout key (`section_type`). |
 | `ui_token` | Design token or dotted path (`name`). |
-| `ui_export` | Merged export shaped like `bufab_ui_guidelines.json`. |
+| `ui_export` | Merged export of the current UI guideline object. |
 | `ui_export_markdown` | Human-readable markdown export of current UI fragments. |
 
 ## Verify
@@ -122,7 +129,7 @@ npm run verify:ui
 
 - **Slow first request**: embedding model download or LanceDB initialization.
 - **`waf_guidelines` errors**: confirm `npx -y @azure/mcp@latest server start --transport stdio …` works locally and Azure auth is valid.
-- **Missing UI data**: ensure `BUFAB_UI_GUIDELINES_JSON` points at the correct file, or set `BUFAB_UI_FORCE_RESEED=1` once after changing the JSON path.
+- **Missing UI data**: populate UI fragments using `ui_upsert`; if needed, set `BUFAB_UI_FORCE_RESEED=1` once to clear stale rows before repopulating.
 
 ## License
 
