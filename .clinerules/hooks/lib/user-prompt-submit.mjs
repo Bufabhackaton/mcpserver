@@ -2,21 +2,14 @@
 // Cline UserPromptSubmit adapter. Always injects the Bufab guideline
 // reminder as `contextModification`.
 
-import {
-  readStdin,
-  BUFAB_REMINDER,
-  BUFAB_INFRA_REMINDER,
-  BUFAB_WAF_REMINDER,
-  BUFAB_MCP_INFRA_REMINDER,
-} from "./_core.mjs";
+import { readStdin, BUFAB_REMINDER } from "./_core.mjs";
 
 (async () => {
   await readStdin();
   process.stdout.write(
     JSON.stringify({
       cancel: false,
-      contextModification:
-        BUFAB_REMINDER + BUFAB_WAF_REMINDER + BUFAB_MCP_INFRA_REMINDER + BUFAB_INFRA_REMINDER,
+      contextModification: BUFAB_REMINDER,
     }),
   );
 })();

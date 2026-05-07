@@ -146,6 +146,11 @@ function missingGuidelinesReminder(details) {
     "- seed UI LanceDB via `ui_upsert` (or ensure BUFAB_UI_DB_PATH points at a populated DB)",
     "",
     "Until this is fixed, treat UI work as blocked (the validator also depends on live MCP guidelines).",
+    "",
+    "[How to use bufab-mcp for UI + infrastructure]",
+    "- For UI: use `ui_section_spec(section_type)`, `ui_token(name)`, and `ui_search(query)` before writing UI code.",
+    "- For infrastructure: consult WAF via `waf_guidelines` and internal overlays via `rules_get(slug=bufab-infrastructure-context-overlay)` / `rules_search(query=...)`.",
+    "- For Azure Bicep changes: validate with `bicep_validate` (include all required files: main, modules, *.bicepparam, bicepconfig.json).",
   ].filter(Boolean);
   return lines.join("\n");
 }
@@ -171,6 +176,16 @@ function buildReminderFromGuidelines(guidelines) {
   );
   lines.push("violations it finds. Treat that feedback as a build error - fix and re-edit.");
   lines.push("");
+  lines.push("[Infrastructure guidance]");
+  lines.push("- Before finalizing infrastructure decisions, consult WAF via bufab-mcp `waf_guidelines`.");
+  lines.push(
+    "- Also review internal overlay via `rules_get(slug=bufab-infrastructure-context-overlay)` (or `rules_search(query=...)`).",
+  );
+  lines.push("- When generating/editing Azure Bicep, validate with bufab-mcp `bicep_validate`.");
+  lines.push(
+    "  Provide all required files (main, modules, *.bicepparam, bicepconfig.json) so `bicep build` and `bicep lint` can resolve imports.",
+  );
+  lines.push("");
   lines.push("Full reference: guidelines/bufab_ui_guidelines.md");
   return lines.join("\n");
 }
@@ -188,22 +203,6 @@ try {
   process.stderr.write(`[bufab] error: failed to load live guidelines for reminder text (${_gError})\n`);
 }
 export const BUFAB_REMINDER = buildReminderFromGuidelines(_g) ?? missingGuidelinesReminder(_gError);
-
-// Add a short infra reminder (kept static to avoid doing filesystem scans in hooks).
-export const BUFAB_INFRA_REMINDER =
-  "\n\n[Bufab infrastructure note]\n" +
-  "When generating or editing Azure Bicep infrastructure, validate with bufab-mcp `bicep_validate`.\n" +
-  "Provide all required files (main, modules, *.bicepparam, bicepconfig.json) so `bicep build` and `bicep lint` can resolve imports.";
-
-export const BUFAB_WAF_REMINDER =
-  "\n\n[Azure Well-Architected Framework (WAF) check]\n" +
-  "Before finalizing infrastructure decisions, consult WAF guidance via bufab-mcp `waf_guidelines` for the relevant Azure service (or omit `service` to list supported services).\n" +
-  "Also review internal overlay via `rules_get(slug=bufab-infrastructure-context-overlay)` to ensure Bufab-specific requirements are met.";
-
-export const BUFAB_MCP_INFRA_REMINDER =
-  "\n\n[Bufab MCP infrastructure recommendations]\n" +
-  "Before finalizing or shipping infrastructure, consult Bufab's infra overlay stored in MCP via `rules_get(slug=bufab-infrastructure-context-overlay)` (or `rules_search(query=...)` for specific topics like tags, naming, secrets, networking).\n" +
-  "Treat those rules as the source of truth for internal recommendations on top of WAF.";
 
 export function isBicepRelatedPath(filePath) {
   const p = String(filePath ?? "").toLowerCase();

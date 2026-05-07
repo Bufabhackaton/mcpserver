@@ -5,9 +5,6 @@
 import {
   readStdin,
   BUFAB_REMINDER,
-  BUFAB_INFRA_REMINDER,
-  BUFAB_WAF_REMINDER,
-  BUFAB_MCP_INFRA_REMINDER,
 } from "./_core.mjs";
 
 (async () => {
@@ -16,8 +13,7 @@ import {
     JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
-        additionalContext:
-          BUFAB_REMINDER + BUFAB_WAF_REMINDER + BUFAB_MCP_INFRA_REMINDER + BUFAB_INFRA_REMINDER,
+        additionalContext: BUFAB_REMINDER,
       },
     }),
   );
