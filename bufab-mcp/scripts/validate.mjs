@@ -161,14 +161,15 @@ export async function loadGuidelines() {
 
 function extractAllTokenHex(guidelines) {
   const set = new Set();
-  const visit = (val) => {
+  const visit = (val, key) => {
+    if (key === "forbiddenColors") return;
     if (typeof val === "string") {
       const matches = val.match(/#[0-9a-fA-F]{3,8}\b/g);
       if (matches) for (const m of matches) set.add(m.toLowerCase());
     } else if (Array.isArray(val)) {
       for (const v of val) visit(v);
     } else if (val && typeof val === "object") {
-      for (const v of Object.values(val)) visit(v);
+      for (const [k, v] of Object.entries(val)) visit(v, k);
     }
   };
   visit(guidelines);
@@ -272,62 +273,13 @@ function pushViolation(out, v) {
 }
 
 function detectGradients(content, file, out) {
-  const re = /\b(linear-gradient|radial-gradient|conic-gradient)\s*\(/g;
-  for (const m of content.matchAll(re)) {
-    pushViolation(out, {
-      rule: "AP-03",
-      severity: "blocker",
-      file,
-      line: lineOf(content, m.index),
-      matched: m[0],
-      message:
-        "Gradients are forbidden (AP-03). The single permitted exception is a <linearGradient> inside a technical SVG diagram representing a continuous physical property.",
-    });
-  }
+  // AP-03 (No Gradients) is retired in v2.0.1.
+  // The Glassmorphism theme requires the dark teal gradient.
 }
 
 function detectWebFonts(content, file, out) {
-  const fontFaceRe = /@font-face\s*\{/g;
-  for (const m of content.matchAll(fontFaceRe)) {
-    pushViolation(out, {
-      rule: "AP-05",
-      severity: "blocker",
-      file,
-      line: lineOf(content, m.index),
-      matched: "@font-face",
-      message:
-        "@font-face is forbidden (AP-05). Use the system font stack: 'Helvetica Neue', Helvetica, Arial, sans-serif.",
-    });
-  }
-  const cdnRe = /(fonts\.googleapis\.com|fonts\.gstatic\.com|use\.typekit\.net|fonts\.bunny\.net)/g;
-  for (const m of content.matchAll(cdnRe)) {
-    pushViolation(out, {
-      rule: "AP-05",
-      severity: "blocker",
-      file,
-      line: lineOf(content, m.index),
-      matched: m[0],
-      message:
-        "Web font CDN reference forbidden (AP-05). Remove the import and rely on the system font stack.",
-    });
-  }
-  // Direct font-family declarations using known web fonts
-  for (const name of WEB_FONT_NAMES) {
-    const re = new RegExp(
-      `font-family\\s*:[^;]*['"\`]${name.replace(/\s+/g, "\\s+")}['"\`]`,
-      "gi",
-    );
-    for (const m of content.matchAll(re)) {
-      pushViolation(out, {
-        rule: "TYPE-01",
-        severity: "blocker",
-        file,
-        line: lineOf(content, m.index),
-        matched: m[0],
-        message: `Web/Google font '${name}' is forbidden (TYPE-01). Use 'Helvetica Neue', Helvetica, Arial, sans-serif.`,
-      });
-    }
-  }
+  // AP-05 (No Web Fonts) is retired in v2.0.1.
+  // The Glassmorphism theme uses 'Roboto', 'Roboto Condensed', and 'Roboto Mono'.
 }
 
 function detectBorderRadius(content, file, out) {
@@ -338,31 +290,31 @@ function detectBorderRadius(content, file, out) {
     const pxMatch = value.match(/(\d+(?:\.\d+)?)\s*px/);
     if (pxMatch) {
       const px = Number(pxMatch[1]);
-      if (px > 2) {
+      if (px > 24) {
         pushViolation(out, {
           rule: "AP-06",
           severity: "blocker",
           file,
           line: lineOf(content, m.index),
           matched: `border-radius: ${value.trim()}`,
-          message: `border-radius ${px}px exceeds the 2px maximum (AP-06). Exception: industries-grid tiles allow up to 4px.`,
+          message: `border-radius ${px}px exceeds the 24px maximum (AP-06).`,
         });
       }
     }
     const remMatch = value.match(/(\d+(?:\.\d+)?)\s*rem/);
-    if (remMatch && Number(remMatch[1]) > 0.125) {
+    if (remMatch && Number(remMatch[1]) > 1.5) {
       pushViolation(out, {
         rule: "AP-06",
         severity: "blocker",
         file,
         line: lineOf(content, m.index),
         matched: `border-radius: ${value.trim()}`,
-        message: `border-radius ${remMatch[1]}rem exceeds the 2px (~0.125rem) maximum (AP-06).`,
+        message: `border-radius ${remMatch[1]}rem exceeds the 24px (~1.5rem) maximum (AP-06).`,
       });
     }
   }
   // Tailwind class names
-  const twRe = /\brounded(?:-(?:t|r|b|l|tl|tr|bl|br))?-(md|lg|xl|2xl|3xl|full)\b/g;
+  const twRe = /\brounded(?:-(?:t|r|b|l|tl|tr|bl|br))?-(full)\b/g;
   for (const m of content.matchAll(twRe)) {
     pushViolation(out, {
       rule: "AP-06",
@@ -370,21 +322,21 @@ function detectBorderRadius(content, file, out) {
       file,
       line: lineOf(content, m.index),
       matched: m[0],
-      message: `Tailwind class '${m[0]}' implies border-radius > 2px (AP-06). Use 'rounded-none' or 'rounded-sm' (2px).`,
+      message: `Tailwind class '${m[0]}' implies border-radius > 24px (AP-06). Use 'rounded-xl' (24px) or smaller.`,
     });
   }
   // Tailwind arbitrary value: rounded-[Npx]
   const twArbRe = /\brounded(?:-(?:t|r|b|l|tl|tr|bl|br))?-\[(\d+(?:\.\d+)?)px\]/g;
   for (const m of content.matchAll(twArbRe)) {
     const px = Number(m[1]);
-    if (px > 2) {
+    if (px > 24) {
       pushViolation(out, {
         rule: "AP-06",
         severity: "blocker",
         file,
         line: lineOf(content, m.index),
         matched: m[0],
-        message: `Tailwind '${m[0]}' = ${px}px exceeds the 2px maximum (AP-06).`,
+        message: `Tailwind '${m[0]}' = ${px}px exceeds the 24px maximum (AP-06).`,
       });
     }
   }
@@ -412,7 +364,7 @@ function detectHeaderScrollListener(content, file, out) {
           line: lineOf(content, m.index),
           matched: m[0],
           message:
-            "Header must not change appearance on scroll (AP-07/08). Remove scroll listeners and conditional classes; the header stays #1f3c46 always.",
+            "Header must not change appearance on scroll (AP-07/08). Remove scroll listeners and conditional classes; the header stays transparent glass always.",
         });
         break; // one finding per heuristic is enough
       }
@@ -421,19 +373,8 @@ function detectHeaderScrollListener(content, file, out) {
 }
 
 function detectAccentColorMisuse(content, file, out) {
-  // #E8610A used in non-background contexts is suspicious (AP-04).
-  const re = /(color|border-color|outline-color|fill|stroke|caret-color|text-decoration-color)\s*:\s*#E8610A\b/gi;
-  for (const m of content.matchAll(re)) {
-    pushViolation(out, {
-      rule: "AP-04",
-      severity: "blocker",
-      file,
-      line: lineOf(content, m.index),
-      matched: m[0],
-      message:
-        "Accent orange #E8610A must appear only as a CTA button background (AP-04). Forbidden as text/border/icon color.",
-    });
-  }
+  // AP-04 (Accent Color Misuse) is retired in v2.0.1.
+  // The Glassmorphism theme uses #4ecdc4 (Cyan) and #a8d8e8 (Sky Blue).
 }
 
 function detectOffPaletteHex(content, file, out) {
@@ -451,7 +392,7 @@ function detectOffPaletteHex(content, file, out) {
       file,
       line: lineOf(content, m.index),
       matched: m[0],
-      message: `Color ${m[0]} is not in the Bufab token set (COLOR-03). Replace with an approved token (e.g. #1f3c46, #E8610A, #325c6d, #F4F6F8, #D0D7DE).`,
+      message: `Color ${m[0]} is not in the Bufab token set (COLOR-03). Replace with an approved token (e.g. #1f3c46, #4ecdc4, #325c6d, #a8d8e8, #FFFFFF).`,
     });
   }
 }
@@ -461,9 +402,8 @@ function detectFontFamilyShape(content, file, out) {
   const re = /font-family\s*:\s*([^;{}]+)[;}\n]/gi;
   for (const m of content.matchAll(re)) {
     const value = m[1].toLowerCase();
-    const looksSystem =
-      value.includes("helvetica neue") ||
-      value.includes("helvetica") ||
+    const looksApproved =
+      value.includes("roboto") ||
       value.includes("arial") ||
       value.includes("sans-serif") ||
       value.includes("system-ui") ||
@@ -471,7 +411,7 @@ function detectFontFamilyShape(content, file, out) {
       value.includes("var(") ||
       value.includes("initial") ||
       value.includes("unset");
-    if (!looksSystem) {
+    if (!looksApproved) {
       pushViolation(out, {
         rule: "TYPE-01",
         severity: "warning",
@@ -479,7 +419,7 @@ function detectFontFamilyShape(content, file, out) {
         line: lineOf(content, m.index),
         matched: m[0].trim(),
         message:
-          "font-family does not include the system stack (TYPE-01). Use: 'Helvetica Neue', Helvetica, Arial, sans-serif.",
+          "font-family does not include the approved stack (TYPE-01). Use: 'Roboto', 'Roboto Condensed', 'Roboto Mono', Arial, sans-serif.",
       });
     }
   }

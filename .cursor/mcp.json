@@ -2,7 +2,7 @@
   "mcpServers": {
     "bufab-mcp": {
       "command": "node",
-      "args": ["${workspaceFolder}/bufab-mcp/dist/index.js"]
+      "args": ["/Users/iplekhanova/Desktop/AI_projects/mcpserver/bufab-mcp/dist/index.js"]
     }
   }
 }

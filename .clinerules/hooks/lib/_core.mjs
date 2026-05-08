@@ -137,17 +137,15 @@ export function formatViolationReport(displayPath, result) {
 // Hardcoded fallback used only when the guidelines JSON is missing. The
 // preferred path is buildReminderFromGuidelines() which derives the reminder
 // from ui_rules.strict_constraints in the live JSON.
-const HARDCODED_REMINDER = `[Bufab UI guidelines are active in this repo]
-Blockers (each violation is a -15 score penalty; PR cannot merge):
-- AP-03  no gradients anywhere (linear-gradient, radial-gradient, conic-gradient)
-- AP-04  accent #E8610A only as CTA button background, never as text/border/icon
-- AP-05  no web fonts; system stack only ('Helvetica Neue', Helvetica, Arial, sans-serif)
-- AP-06  border-radius max 2px (4px allowed only inside industries-grid tiles)
-- AP-07  header background must always be #1f3c46 - no scroll-driven color change
-- AP-08  no scroll listeners or .scrolled classes on the header
-- AP-01  hero text must be left-aligned, never centered
-- AP-02  cards/tiles only inside industries-grid; nowhere else
-- COLOR-03 only the Bufab token palette; no ad-hoc hex colors
+const HARDCODED_REMINDER = `[Bufab UI guidelines are active in this repo (v2.0.1)]
+Strict constraints (each blocker violation is a -15 score penalty; PR cannot merge):
+- AP-03  Glassmorphism theme: Always use the dark teal gradient for page background.
+- AP-04  Accents: Use #4ecdc4 (Cyan) for primary actions and #a8d8e8 (Sky Blue) for secondary.
+- AP-05  Typography: Use 'Roboto', 'Roboto Condensed', or 'Roboto Mono'.
+- AP-06  Surfaces: All glass surfaces must have backdrop-filter: blur(12px) and 1px border.
+- AP-07  Depth: Every glass surface must have an inner top highlight (inset 0 1px 0 rgba(255,255,255,0.18)).
+- AP-08  Header: Fixed/sticky, height 60px, fully transparent glass. No scroll-driven changes.
+- COLOR-03 only the Bufab token palette; no ad-hoc hex colors.
 
 Before writing UI code, call the bufab-mcp tools:
 - ui_section_spec(section_type) for the section you are about to build
