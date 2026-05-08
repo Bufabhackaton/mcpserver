@@ -23,6 +23,13 @@ function emit(obj) {
 }
 const allow = () => emit({ permission: "allow" });
 
+function getLedgerPaths(workspace) {
+  return [
+    resolve(workspace, ".cursor", ".bufab-violations.json"),
+    resolve(workspace, ".bufab-violations.json"),
+  ];
+}
+
 (async () => {
   const raw = await readStdin();
   if (!raw.trim()) allow();
@@ -40,8 +47,13 @@ const allow = () => emit({ permission: "allow" });
   const workspace = event?.workspace_roots?.[0];
   if (!workspace) allow();
 
-  const ledgerPath = resolve(workspace, ".cursor", ".bufab-violations.json");
-  if (!existsSync(ledgerPath)) allow();
+  const [primaryLedgerPath, fallbackLedgerPath] = getLedgerPaths(workspace);
+  const ledgerPath = existsSync(primaryLedgerPath)
+    ? primaryLedgerPath
+    : existsSync(fallbackLedgerPath)
+      ? fallbackLedgerPath
+      : null;
+  if (!ledgerPath) allow();
 
   let ledger;
   try {
@@ -62,13 +74,13 @@ const allow = () => emit({ permission: "allow" });
   }
   lines.push("");
   lines.push(
-    "Re-edit the offending files (afterFileEdit refreshes the ledger) or delete .cursor/.bufab-violations.json once truly fixed.",
+    "Re-edit the offending files (afterFileEdit refreshes the ledger) or delete the violations ledger once truly fixed.",
   );
 
   emit({
     permission: "deny",
     agentMessage: lines.join("\n"),
-    userMessage: `Bufab: ${ledger.summary.blockers} blocker(s) pending - see .cursor/.bufab-violations.json`,
+    userMessage: `Bufab: ${ledger.summary.blockers} blocker(s) pending - see ${ledgerPath.endsWith(".cursor/.bufab-violations.json") ? ".cursor/.bufab-violations.json" : ".bufab-violations.json"}`,
   });
 })().catch((e) => {
   process.stderr.write(

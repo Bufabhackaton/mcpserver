@@ -6,21 +6,19 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { loadGuidelines } from "../../../bufab-mcp/scripts/validate.mjs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// lib/ -> hooks/ -> .clinerules/ -> repo root -> bufab-mcp/scripts/validate.mjs
-export const VALIDATOR_PATH = resolve(
-  __dirname,
-  "..",
-  "..",
-  "..",
-  "bufab-mcp",
-  "scripts",
-  "validate.mjs",
-);
+const VALIDATOR_PATH_CANDIDATES = [
+  // Default expected layout: <workspace>/bufab-mcp/scripts/validate.mjs
+  resolve(__dirname, "..", "..", "..", "bufab-mcp", "scripts", "validate.mjs"),
+  // This repository layout: <workspace>/../Guidlines/bufab-mcp/scripts/validate.mjs
+  resolve(__dirname, "..", "..", "..", "..", "Guidlines", "bufab-mcp", "scripts", "validate.mjs"),
+];
+
+export const VALIDATOR_PATH =
+  VALIDATOR_PATH_CANDIDATES.find((p) => existsSync(p)) ?? VALIDATOR_PATH_CANDIDATES[0];
 
 export async function readStdin() {
   const chunks = [];
@@ -197,7 +195,14 @@ function buildReminderFromGuidelines(guidelines) {
 let _g = null;
 let _gError = null;
 try {
-  _g = await loadGuidelines();
+  if (!existsSync(VALIDATOR_PATH)) {
+    throw new Error(`validator not found at ${VALIDATOR_PATH}`);
+  }
+  const validatorModule = await import(pathToFileURL(VALIDATOR_PATH).href);
+  if (typeof validatorModule?.loadGuidelines !== "function") {
+    throw new Error(`loadGuidelines() export missing in ${VALIDATOR_PATH}`);
+  }
+  _g = await validatorModule.loadGuidelines();
 } catch (e) {
   _gError = e instanceof Error ? e.message : String(e);
   process.stderr.write(`[bufab] error: failed to load live guidelines for reminder text (${_gError})\n`);
