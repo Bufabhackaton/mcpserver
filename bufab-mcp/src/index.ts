@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -227,20 +227,84 @@ const bufabAppendix = loadBufabAppendix();
 type SetupEnvFile = {
   /** Path relative to the target project root (e.g. ".cursor/hooks.json"). */
   path: string;
+  /** MCP resource URI that can be used with resources/read. */
+  resource_uri: string;
   /** File contents encoded as base64. */
   content_base64: string;
   /** Whether file is executable on the server filesystem (best-effort hint). */
   executable: boolean;
 };
 
-async function listFilesRecursive(rootAbs: string, relBase = ""): Promise<string[]> {
+const SETUP_ENV_ROOTS = [".claude", ".clinerules", ".cursor"];
+const SETUP_ENV_RESOURCE_TEMPLATE = "bufab-agent-config://{source}/{+path}";
+const MAX_SETUP_ENV_FILES = 200;
+const setupEnvSourceDirs = new Map<string, string>();
+
+function setupEnvResourceUri(sourceDirAbs: string, relPath: string): string {
+  const source = setupEnvSourceId(sourceDirAbs);
+  setupEnvSourceDirs.set(source, sourceDirAbs);
+  return `bufab-agent-config://${source}/${encodeResourcePath(relPath)}`;
+}
+
+function defaultSetupEnvironmentSourceDir(): string {
+  return resolve(__dirname, "..", "..");
+}
+
+function setupEnvSourceId(sourceDirAbs: string): string {
+  const raw = basename(sourceDirAbs) || "project";
+  const id = raw.toLowerCase().replace(/[^a-z0-9._~-]+/g, "-").replace(/^-+|-+$/g, "");
+  return id || "project";
+}
+
+function encodeResourcePath(relPath: string): string {
+  return relPath.split("/").map(encodeURIComponent).join("/");
+}
+
+function decodeResourcePath(pathname: string): string {
+  return pathname
+    .replace(/^\/+/, "")
+    .split("/")
+    .map(decodeURIComponent)
+    .join("/");
+}
+
+function isSetupEnvironmentPath(relPath: string): boolean {
+  return SETUP_ENV_ROOTS.some((root) => relPath === root || relPath.startsWith(`${root}/`));
+}
+
+function isSetupEnvironmentConfigFile(relPath: string): boolean {
+  if (relPath === ".clinerules" || relPath.startsWith(".clinerules/")) return true;
+  if (relPath.startsWith(".claude/")) return true;
+  return (
+    relPath === ".cursor/mcp.json" ||
+    relPath === ".cursor/hooks.json" ||
+    relPath.startsWith(".cursor/rules/")
+  );
+}
+
+function guessTextMimeType(relPath: string): string {
+  if (relPath.endsWith(".json")) return "application/json";
+  if (relPath.endsWith(".md") || relPath.endsWith(".mdc")) return "text/markdown";
+  if (relPath.endsWith(".yml") || relPath.endsWith(".yaml")) return "application/yaml";
+  if (relPath.endsWith(".toml")) return "application/toml";
+  if (relPath.endsWith(".js") || relPath.endsWith(".mjs") || relPath.endsWith(".cjs")) {
+    return "text/javascript";
+  }
+  if (relPath.endsWith(".ts") || relPath.endsWith(".mts") || relPath.endsWith(".cts")) {
+    return "text/typescript";
+  }
+  return "text/plain";
+}
+
+async function listFilesRecursive(rootAbs: string, relBase = "", limit = MAX_SETUP_ENV_FILES): Promise<string[]> {
   const entries = await readdir(rootAbs, { withFileTypes: true });
   const out: string[] = [];
   for (const e of entries) {
+    if (out.length >= limit) break;
     const rel = relBase ? `${relBase}/${e.name}` : e.name;
     const abs = join(rootAbs, e.name);
     if (e.isDirectory()) {
-      out.push(...(await listFilesRecursive(abs, rel)));
+      out.push(...(await listFilesRecursive(abs, rel, limit - out.length)));
     } else if (e.isFile()) {
       out.push(rel);
     }
@@ -252,34 +316,150 @@ async function exportSetupEnvironment(sourceDirAbs: string): Promise<{
   source_dir: string;
   files: SetupEnvFile[];
 }> {
-  const roots = [".claude", ".clinerules", ".cursor"];
   const files: SetupEnvFile[] = [];
 
-  for (const root of roots) {
+  for (const root of SETUP_ENV_ROOTS) {
     const rootAbs = join(sourceDirAbs, root);
     // If a folder is missing, just skip it; the caller can decide whether that's acceptable.
+    let s;
     try {
-      const s = await stat(rootAbs);
-      if (!s.isDirectory()) continue;
+      s = await stat(rootAbs);
     } catch {
       continue;
     }
 
-    const relPaths = await listFilesRecursive(rootAbs, root);
+    const relPaths = s.isDirectory()
+      ? await listFilesRecursive(rootAbs, root, MAX_SETUP_ENV_FILES - files.length)
+      : s.isFile()
+        ? [root]
+        : [];
     for (const rel of relPaths) {
+      if (files.length >= MAX_SETUP_ENV_FILES) break;
+      if (!isSetupEnvironmentConfigFile(rel)) continue;
       const abs = join(sourceDirAbs, rel);
       const buf = await readFile(abs);
       const st = await stat(abs);
       files.push({
         path: rel,
+        resource_uri: setupEnvResourceUri(sourceDirAbs, rel),
         content_base64: buf.toString("base64"),
         executable: (st.mode & 0o111) !== 0,
       });
     }
+    if (files.length >= MAX_SETUP_ENV_FILES) break;
   }
 
   files.sort((a, b) => a.path.localeCompare(b.path));
   return { source_dir: sourceDirAbs, files };
+}
+
+function candidateSetupEnvironmentDirs(requestedSourceDirAbs: string): string[] {
+  const candidates = new Set<string>();
+  const addParents = (start: string) => {
+    let current = start;
+    const root = parse(current).root;
+    while (current && !candidates.has(current)) {
+      candidates.add(current);
+      if (current === root) break;
+      current = dirname(current);
+    }
+  };
+
+  addParents(requestedSourceDirAbs);
+  addParents(defaultSetupEnvironmentSourceDir());
+  addParents(process.cwd());
+
+  const configuredSourceDir = process.env.BUFAB_AGENT_CONFIG_SOURCE_DIR?.trim();
+  if (configuredSourceDir) {
+    addParents(resolve(process.cwd(), configuredSourceDir));
+  }
+
+  return [...candidates];
+}
+
+async function exportSetupEnvironmentWithDiscovery(requestedSourceDirAbs: string): Promise<{
+  requested_source_dir: string;
+  source_dir: string;
+  discovery_used: boolean;
+  searched_source_dirs: string[];
+  files: SetupEnvFile[];
+}> {
+  const searched: string[] = [];
+
+  for (const candidate of candidateSetupEnvironmentDirs(requestedSourceDirAbs)) {
+    searched.push(candidate);
+    const payload = await exportSetupEnvironment(candidate);
+    if (payload.files.length > 0) {
+      return {
+        requested_source_dir: requestedSourceDirAbs,
+        source_dir: payload.source_dir,
+        discovery_used: candidate !== requestedSourceDirAbs,
+        searched_source_dirs: searched,
+        files: payload.files,
+      };
+    }
+  }
+
+  return {
+    requested_source_dir: requestedSourceDirAbs,
+    source_dir: requestedSourceDirAbs,
+    discovery_used: false,
+    searched_source_dirs: searched,
+    files: [],
+  };
+}
+
+async function resolveSetupEnvironmentSourceDir(source: string): Promise<string> {
+  const cached = setupEnvSourceDirs.get(source);
+  if (cached) {
+    return cached;
+  }
+
+  for (const candidate of candidateSetupEnvironmentDirs(defaultSetupEnvironmentSourceDir())) {
+    const sourceId = setupEnvSourceId(candidate);
+    if (sourceId !== source) continue;
+    const payload = await exportSetupEnvironment(candidate);
+    if (payload.files.length > 0) {
+      setupEnvSourceDirs.set(source, candidate);
+      return candidate;
+    }
+  }
+
+  throw new Error(`unknown setup environment resource source: ${source}`);
+}
+
+async function readSetupEnvironmentResource(uri: URL): Promise<{
+  uri: string;
+  mimeType: string;
+  text: string;
+}> {
+  const source = uri.hostname;
+  if (!source) {
+    throw new Error("setup environment resource URI is missing source");
+  }
+
+  const sourceDirAbs = await resolveSetupEnvironmentSourceDir(source);
+  const relPath = sanitizeRelativePath(decodeResourcePath(uri.pathname));
+  if (!isSetupEnvironmentPath(relPath) || !isSetupEnvironmentConfigFile(relPath)) {
+    throw new Error(`unsupported setup environment path: ${relPath}`);
+  }
+
+  const fileAbs = resolve(sourceDirAbs, relPath);
+  const sourceWithSep = sourceDirAbs.endsWith("/") ? sourceDirAbs : `${sourceDirAbs}/`;
+  if (fileAbs !== sourceDirAbs && !fileAbs.startsWith(sourceWithSep)) {
+    throw new Error(`path escapes source_dir: ${relPath}`);
+  }
+
+  const st = await stat(fileAbs);
+  if (!st.isFile()) {
+    throw new Error(`setup environment resource is not a file: ${relPath}`);
+  }
+
+  return {
+    uri: uri.toString(),
+    mimeType: guessTextMimeType(relPath),
+    text: await readFile(fileAbs, "utf8"),
+  };
 }
 
 const server = new McpServer(
@@ -291,6 +471,42 @@ const server = new McpServer(
     instructions:
       "Tools: (1) waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) rules_* — infrastructure rules in LanceDB (.lancedb). (3) ui_* (including ui_section_spec, ui_token, ui_export, ui_export_markdown) — UI guidelines fragments in LanceDB (.lancedb-ui). Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_FORCE_RESEED=1 to clear and rebuild UI data via ui_upsert. First embedding use downloads MiniLM via @huggingface/transformers.",
   },
+);
+
+server.registerResource(
+  "setup-environment-file",
+  new ResourceTemplate(SETUP_ENV_RESOURCE_TEMPLATE, {
+    list: async () => {
+      const configuredSourceDir = process.env.BUFAB_AGENT_CONFIG_SOURCE_DIR?.trim();
+      const sourceDirAbs = configuredSourceDir
+        ? resolve(process.cwd(), configuredSourceDir)
+        : defaultSetupEnvironmentSourceDir();
+      const payload = await exportSetupEnvironmentWithDiscovery(sourceDirAbs);
+      return {
+        resources: payload.files.map((file) => ({
+          uri: file.resource_uri,
+          name: file.path,
+          title: file.path,
+          description: "Agent configuration file",
+          mimeType: guessTextMimeType(file.path),
+          _meta: {
+            source: setupEnvSourceId(payload.source_dir),
+            path: file.path,
+            executable: file.executable,
+          },
+        })),
+      };
+    },
+  }),
+  {
+    title: "Setup environment file",
+    description:
+      "Reads exported agent configuration files under .claude, .clinerules, or .cursor from a source directory.",
+    mimeType: "text/plain",
+  },
+  async (uri) => ({
+    contents: [await readSetupEnvironmentResource(uri)],
+  }),
 );
 
 server.registerTool(
@@ -309,7 +525,7 @@ server.registerTool(
   async ({ source_dir }) => {
     try {
       const src = resolve(process.cwd(), source_dir ?? ".");
-      const payload = await exportSetupEnvironment(src);
+      const payload = await exportSetupEnvironmentWithDiscovery(src);
       return { content: [{ type: "text", text: jsonText(payload) }] };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
