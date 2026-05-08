@@ -19,6 +19,13 @@ import {
 import { dirname, resolve } from "node:path";
 import { formatBicepValidateHint, readStdin, resolveAgainstWorkspace, runValidator } from "./_core.mjs";
 
+function getLedgerPaths(workspace) {
+  return [
+    resolve(workspace, ".cursor", ".bufab-violations.json"),
+    resolve(workspace, ".bufab-violations.json"),
+  ];
+}
+
 (async () => {
   const raw = await readStdin();
   if (!raw.trim()) process.exit(0);
@@ -42,12 +49,17 @@ import { formatBicepValidateHint, readStdin, resolveAgainstWorkspace, runValidat
   if (!result) process.exit(0);
 
   if (!workspace) process.exit(0);
-  const ledgerPath = resolve(workspace, ".cursor", ".bufab-violations.json");
+  const [primaryLedgerPath, fallbackLedgerPath] = getLedgerPaths(workspace);
+  const existingLedgerPath = existsSync(primaryLedgerPath)
+    ? primaryLedgerPath
+    : existsSync(fallbackLedgerPath)
+      ? fallbackLedgerPath
+      : primaryLedgerPath;
 
   let prior = { violations: [] };
-  if (existsSync(ledgerPath)) {
+  if (existsSync(existingLedgerPath)) {
     try {
-      prior = JSON.parse(readFileSync(ledgerPath, "utf8"));
+      prior = JSON.parse(readFileSync(existingLedgerPath, "utf8"));
     } catch {
       prior = { violations: [] };
     }
@@ -64,12 +76,27 @@ import { formatBicepValidateHint, readStdin, resolveAgainstWorkspace, runValidat
     updated_at: new Date().toISOString(),
   };
 
-  mkdirSync(dirname(ledgerPath), { recursive: true });
-  writeFileSync(ledgerPath, JSON.stringify(ledger, null, 2));
+  let writtenLedgerPath = null;
+  for (const ledgerPath of [primaryLedgerPath, fallbackLedgerPath]) {
+    try {
+      mkdirSync(dirname(ledgerPath), { recursive: true });
+      writeFileSync(ledgerPath, JSON.stringify(ledger, null, 2));
+      writtenLedgerPath = ledgerPath;
+      break;
+    } catch {
+      // Try fallback location.
+    }
+  }
+  if (!writtenLedgerPath) {
+    process.stderr.write(
+      "[bufab] failed to persist violations ledger to both .cursor/.bufab-violations.json and .bufab-violations.json\n",
+    );
+    process.exit(0);
+  }
 
   if (ledger.summary.blockers > 0 || ledger.summary.warnings > 0) {
     process.stderr.write(
-      `[bufab] ${filePath}: ${ledger.summary.blockers} blocker(s), ${ledger.summary.warnings} warning(s) - see .cursor/.bufab-violations.json\n`,
+      `[bufab] ${filePath}: ${ledger.summary.blockers} blocker(s), ${ledger.summary.warnings} warning(s) - see ${writtenLedgerPath.endsWith(".cursor/.bufab-violations.json") ? ".cursor/.bufab-violations.json" : ".bufab-violations.json"}\n`,
     );
   }
   process.exit(0);
