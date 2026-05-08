@@ -9,6 +9,7 @@ import {
   resolveAgainstWorkspace,
   runValidator,
   formatViolationReport,
+  formatBicepValidateHint,
 } from "./_core.mjs";
 
 function passThrough() {
@@ -34,16 +35,15 @@ function passThrough() {
 
   const absPath = resolveAgainstWorkspace(filePath, event?.cwd);
   const result = runValidator(absPath);
-  if (!result) passThrough();
-
-  const message = formatViolationReport(filePath, result);
-  if (!message) passThrough();
+  const message = result ? formatViolationReport(filePath, result) : null;
+  const bicepHint = formatBicepValidateHint(filePath);
+  if (!message && !bicepHint) passThrough();
 
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "PostToolUse",
-        additionalContext: message,
+        additionalContext: [message, bicepHint].filter(Boolean).join("\n\n"),
       },
     }),
   );

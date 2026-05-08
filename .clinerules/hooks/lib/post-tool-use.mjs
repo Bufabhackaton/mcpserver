@@ -7,6 +7,7 @@ import {
   resolveAgainstWorkspace,
   runValidator,
   formatViolationReport,
+  formatBicepValidateHint,
 } from "./_core.mjs";
 
 function emit(obj) {
@@ -35,12 +36,11 @@ const pass = () => emit({ cancel: false });
 
   const absPath = resolveAgainstWorkspace(relPath, event.workspaceRoots?.[0]);
   const result = runValidator(absPath);
-  if (!result) pass();
+  const message = result ? formatViolationReport(relPath, result) : null;
+  const bicepHint = formatBicepValidateHint(relPath);
+  if (!message && !bicepHint) pass();
 
-  const message = formatViolationReport(relPath, result);
-  if (!message) pass();
-
-  emit({ cancel: false, contextModification: message });
+  emit({ cancel: false, contextModification: [message, bicepHint].filter(Boolean).join("\n\n") });
 })().catch((e) => {
   process.stderr.write(`PostToolUse hook error: ${e instanceof Error ? e.stack : String(e)}\n`);
   pass();
