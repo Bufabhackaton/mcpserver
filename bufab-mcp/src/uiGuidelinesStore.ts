@@ -604,42 +604,48 @@ export class UiGuidelinesStore {
       }
     };
 
-    const meta = parse("spec-meta") as Record<string, unknown> | undefined;
-    const designSystem: Record<string, unknown> = {};
+    const meta = parse("spec-meta");
     
-    const style: Record<string, unknown> = {};
-    const c = parse("tokens-colors");
-    if (c !== undefined) style.colors = c;
-    const typ = parse("tokens-typography");
-    if (typ !== undefined) style.typography = typ;
-    const sp = parse("tokens-spacing");
-    if (sp !== undefined) style.spacing = sp;
-    const layout = parse("layout");
-    if (layout !== undefined) style.layout = layout;
+    // Reconstruct tokens object
+    const tokens: Record<string, any> = {};
+    const tokenSlugs = [
+      "tokens-colors", "tokens-effects", "tokens-typography", 
+      "tokens-spacing", "tokens-borders", "tokens-shadows", 
+      "tokens-transitions", "tokens-zindex"
+    ];
     
-    if (Object.keys(style).length) {
-      designSystem.style = style;
+    for (const slug of tokenSlugs) {
+      const val = parse(slug);
+      if (val && typeof val === "object") {
+        Object.assign(tokens, val);
+      }
     }
 
-    const componentRules: Record<string, unknown> = {};
+    // Reconstruct components object
+    const components: Record<string, any> = {};
     for (const slug of bodies.keys()) {
-      if (slug.startsWith("section-")) {
-        const key = slug.slice("section-".length);
+      if (slug.startsWith("component-")) {
+        const key = slug.slice("component-".length);
         const v = parse(slug);
         if (v !== undefined) {
-          componentRules[key] = v;
+          components[key] = v;
         }
       }
     }
 
-    const out: Record<string, unknown> = {
-      version: meta?.version ?? "1.0.0",
+    const out: Record<string, any> = {
+      meta: meta || {},
+      tokens: Object.keys(tokens).length ? tokens : undefined,
+      layout: parse("layout-general") || parse("layout"),
+      components: Object.keys(components).length ? components : undefined,
+      writingStyle: parse("writing-style"),
+      // Legacy fields for backward compatibility
+      version: (meta as any)?.version ?? "1.0.0",
       designSystem: {
-        name: meta?.name ?? "Bufab Enterprise UI",
-        ...style
+        name: (meta as any)?.name ?? "Bufab Design System",
+        ...tokens
       },
-      componentRules,
-      crossApplicationRules: parse("constraints-strict") ?? []
+      componentRules: components
     };
 
     return out;
