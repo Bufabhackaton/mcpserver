@@ -6,5 +6,10 @@ import { readStdin, BUFAB_REMINDER } from "./_core.mjs";
 
 (async () => {
   await readStdin();
-  process.stdout.write(JSON.stringify({ cancel: false, contextModification: BUFAB_REMINDER }));
+  process.stdout.write(
+    JSON.stringify({
+      cancel: false,
+      contextModification: BUFAB_REMINDER,
+    }),
+  );
 })();

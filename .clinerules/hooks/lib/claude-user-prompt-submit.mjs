@@ -2,7 +2,10 @@
 // Claude Code UserPromptSubmit adapter. Always returns the Bufab reminder
 // via hookSpecificOutput.additionalContext.
 
-import { readStdin, BUFAB_REMINDER } from "./_core.mjs";
+import {
+  readStdin,
+  BUFAB_REMINDER,
+} from "./_core.mjs";
 
 (async () => {
   await readStdin();
