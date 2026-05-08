@@ -13,6 +13,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const server = join(root, "dist", "index.js");
 const tmp = await mkdtemp(join(tmpdir(), "bufab-mcp-smoke-"));
 await writeFile(join(tmp, ".clinerules"), "smoke-rule\n", "utf8");
+await writeFile(join(tmp, ".claude"), "smoke-claude\n", "utf8");
 
 const child = spawn(process.execPath, [server], {
   stdio: ["pipe", "pipe", "inherit"],
@@ -104,6 +105,9 @@ try {
     if (!listedUris.some((uri) => uri.endsWith("/.clinerules"))) {
       throw new Error(`resources/list did not include .clinerules: ${listedUris.join(", ")}`);
     }
+    if (!listedUris.some((uri) => uri.endsWith("/.claude"))) {
+      throw new Error(`resources/list did not include .claude: ${listedUris.join(", ")}`);
+    }
     console.log("resources/list OK:", listedUris.join(", "));
 
     const setup = await request("tools/call", {
@@ -115,9 +119,13 @@ try {
     }
     const text = setup.result?.content?.find((part) => part.type === "text")?.text;
     const payload = JSON.parse(text);
-    const uri = payload.files?.[0]?.resource_uri;
+    const clinerules = payload.files?.find((file) => file.path === ".clinerules");
+    const uri = clinerules?.resource_uri;
     if (!uri) {
       throw new Error(`setup_environment did not return a resource_uri: ${text}`);
+    }
+    if (!payload.files?.some((file) => file.path === ".claude")) {
+      throw new Error(`setup_environment did not include .claude: ${text}`);
     }
     const resource = await request("resources/read", { uri });
     if (resource.error) {
@@ -144,6 +152,68 @@ try {
       throw new Error(`setup_environment did not discover parent config: ${discoveredText}`);
     }
     console.log("setup_environment discovery OK:", discoveredPayload.source_dir);
+
+    // Guard against source id collisions when different absolute paths share a basename.
+    const collisionRoot = await mkdtemp(join(tmpdir(), "bufab-mcp-collision-"));
+    try {
+      const dirA = join(collisionRoot, "one", "project");
+      const dirB = join(collisionRoot, "two", "project");
+      await mkdir(dirA, { recursive: true });
+      await mkdir(dirB, { recursive: true });
+      await writeFile(join(dirA, ".clinerules"), "collision-a\n", "utf8");
+      await writeFile(join(dirB, ".clinerules"), "collision-b\n", "utf8");
+
+      const setupA = await request("tools/call", {
+        name: "setup_environment",
+        arguments: { source_dir: dirA },
+      });
+      if (setupA.error) {
+        throw new Error(JSON.stringify(setupA.error));
+      }
+      const payloadA = JSON.parse(setupA.result?.content?.find((part) => part.type === "text")?.text);
+      const uriA = payloadA.files?.find((file) => file.path === ".clinerules")?.resource_uri;
+      if (!uriA) {
+        throw new Error(`setup_environment did not return uri for dirA: ${JSON.stringify(payloadA)}`);
+      }
+
+      const setupB = await request("tools/call", {
+        name: "setup_environment",
+        arguments: { source_dir: dirB },
+      });
+      if (setupB.error) {
+        throw new Error(JSON.stringify(setupB.error));
+      }
+      const payloadB = JSON.parse(setupB.result?.content?.find((part) => part.type === "text")?.text);
+      const uriB = payloadB.files?.find((file) => file.path === ".clinerules")?.resource_uri;
+      if (!uriB) {
+        throw new Error(`setup_environment did not return uri for dirB: ${JSON.stringify(payloadB)}`);
+      }
+      if (uriA === uriB) {
+        throw new Error(`setup_environment generated colliding resource URIs: ${uriA}`);
+      }
+
+      const readA = await request("resources/read", { uri: uriA });
+      if (readA.error) {
+        throw new Error(JSON.stringify(readA.error));
+      }
+      const readAText = readA.result?.contents?.[0]?.text;
+      if (readAText !== "collision-a\n") {
+        throw new Error(`resources/read returned wrong content for uriA: ${JSON.stringify(readAText)}`);
+      }
+
+      const readB = await request("resources/read", { uri: uriB });
+      if (readB.error) {
+        throw new Error(JSON.stringify(readB.error));
+      }
+      const readBText = readB.result?.contents?.[0]?.text;
+      if (readBText !== "collision-b\n") {
+        throw new Error(`resources/read returned wrong content for uriB: ${JSON.stringify(readBText)}`);
+      }
+
+      console.log("setup_environment collision guard OK:", uriA, uriB);
+    } finally {
+      await rm(collisionRoot, { recursive: true, force: true });
+    }
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
