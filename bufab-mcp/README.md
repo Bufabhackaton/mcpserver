@@ -5,6 +5,7 @@ MCP (Model Context Protocol) server that exposes:
 1. **`waf_guidelines`** — Azure Well-Architected Framework guidance via the official [`@azure/mcp`](https://www.npmjs.com/package/@azure/mcp) child process, plus a static Bufab overlay from `data/bufab-infrastructure-appendix.md` when present.
 2. **Infrastructure rules** — LanceDB-backed CRUD and semantic search (`rules_*`).
 3. **UI guidelines** — LanceDB-backed fragments managed via MCP tools (`ui_*`, including `ui_section_spec`, `ui_token`, `ui_export`, `ui_export_markdown`).
+4. **Agent config resources** — `.claude`, `.clinerules`, and `.cursor` files exposed as MCP resources via server-owned `bufab-agent-config://...` URIs.
 
 Transport: **stdio** (standard MCP over stdin/stdout).
 --
@@ -80,6 +81,7 @@ Use `command`: `node`, `args`: `["/absolute/path/to/bufab-mcp/dist/index.js"]`, 
 | `BUFAB_AZURE_MCP_COMMAND` | Command to spawn the Azure MCP child (default `npx`). |
 | `BUFAB_AZURE_MCP_PACKAGE` | Package passed to npx (default `@azure/mcp@latest`). |
 | `BUFAB_AZURE_MCP_SERVER_ARGS` | Extra whitespace-separated arguments appended to the Azure MCP `server start` invocation. |
+| `BUFAB_AGENT_CONFIG_SOURCE_DIR` | Optional source directory used when clients call `resources/list` for exported `.claude`, `.clinerules`, and `.cursor` files. When unset, `resources/list` starts at the parent directory of `bufab-mcp` and uses discovery from there. |
 
 ## UI data bootstrap behavior
 
@@ -108,6 +110,34 @@ UI LanceDB starts empty by design (no implicit seed from JSON files).
 | `ui_token` | Design token or dotted path (`name`). |
 | `ui_export` | Merged export of the current UI guideline object. |
 | `ui_export_markdown` | Human-readable markdown export of current UI fragments. |
+| `setup_environment` | Export `.claude`, `.clinerules`, and `.cursor` files from a source directory. If the requested directory has no config, it checks parent directories, the parent of `bufab-mcp`, the MCP process cwd, and `BUFAB_AGENT_CONFIG_SOURCE_DIR`. Each file includes a server-owned `resource_uri` readable through MCP `resources/read`. |
+
+## Resources
+
+| URI template | Purpose |
+|--------------|---------|
+| `bufab-agent-config://{source}/{+path}` | Reads a single exported agent config file. `source` is a server-owned project id and `path` is a relative file path under `.claude`, `.clinerules`, or `.cursor`. |
+
+`resources/list` advertises discovered config files as resources. To avoid exposing a whole editor cache, `.cursor` discovery is limited to `.cursor/mcp.json`, `.cursor/hooks.json`, and `.cursor/rules/*`; the total exported config list is capped.
+
+`setup_environment` returns resource URIs for discovered files:
+
+```json
+{
+  "requested_source_dir": "/path/to/project/app",
+  "source_dir": "/path/to/project",
+  "discovery_used": true,
+  "searched_source_dirs": ["/path/to/project/app", "/path/to/project"],
+  "files": [
+    {
+      "path": ".cursor/rules/project.mdc",
+      "resource_uri": "bufab-agent-config://project/.cursor/rules/project.mdc",
+      "content_base64": "...",
+      "executable": false
+    }
+  ]
+}
+```
 
 ## Verify
 
