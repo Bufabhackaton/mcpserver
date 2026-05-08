@@ -605,179 +605,81 @@ export class UiGuidelinesStore {
     };
 
     const meta = parse("spec-meta") as Record<string, unknown> | undefined;
-    const sectionTypes: Record<string, unknown> = {};
+    const designSystem: Record<string, unknown> = {};
+    
+    const style: Record<string, unknown> = {};
+    const c = parse("tokens-colors");
+    if (c !== undefined) style.colors = c;
+    const typ = parse("tokens-typography");
+    if (typ !== undefined) style.typography = typ;
+    const sp = parse("tokens-spacing");
+    if (sp !== undefined) style.spacing = sp;
+    const layout = parse("layout");
+    if (layout !== undefined) style.layout = layout;
+    
+    if (Object.keys(style).length) {
+      designSystem.style = style;
+    }
+
+    const componentRules: Record<string, unknown> = {};
     for (const slug of bodies.keys()) {
-      if (slug.startsWith("section-") && slug !== "section-hero") {
+      if (slug.startsWith("section-")) {
         const key = slug.slice("section-".length);
         const v = parse(slug);
         if (v !== undefined) {
-          sectionTypes[key] = v;
+          componentRules[key] = v;
         }
       }
     }
 
-    const style: Record<string, unknown> = {};
-    const c = parse("tokens-colors");
-    if (c !== undefined) {
-      style.colors = c;
-    }
-    const typ = parse("tokens-typography");
-    if (typ !== undefined) {
-      style.typography = typ;
-    }
-    const sp = parse("tokens-spacing");
-    if (sp !== undefined) {
-      style.spacing = sp;
-    }
-    const br = parse("tokens-borders");
-    if (br !== undefined) {
-      style.borders_and_radius = br;
-    }
-    const sh = parse("tokens-shadows");
-    if (sh !== undefined) {
-      style.shadows = sh;
-    }
-    const bt = parse("tokens-buttons");
-    if (bt !== undefined) {
-      style.buttons = bt;
-    }
-    const tone = parse("tokens-tone") as Record<string, unknown> | undefined;
-    if (tone) {
-      if (tone.visual_tone !== undefined) {
-        style.visual_tone = tone.visual_tone;
-      }
-      if (tone.anti_tone !== undefined) {
-        style.anti_tone = tone.anti_tone;
-      }
-    }
+    const out: Record<string, unknown> = {
+      version: meta?.version ?? "1.0.0",
+      designSystem: {
+        name: meta?.name ?? "Bufab Enterprise UI",
+        ...style
+      },
+      componentRules,
+      crossApplicationRules: parse("constraints-strict") ?? []
+    };
 
-    const components: Record<string, unknown> = {};
-    const header = parse("component-header");
-    if (header !== undefined) {
-      components.header = header;
-    }
-    const hero = parse("section-hero");
-    if (hero !== undefined) {
-      components.hero = hero;
-    }
-    if (Object.keys(sectionTypes).length) {
-      components.sections = { types: sectionTypes };
-    }
-    const footer = parse("component-footer");
-    if (footer !== undefined) {
-      components.footer = footer;
-    }
-
-    const ui_rules: Record<string, unknown> = {};
-    const layout = parse("layout");
-    if (layout !== undefined) {
-      ui_rules.layout = layout;
-    }
-    if (Object.keys(components).length) {
-      ui_rules.components = components;
-    }
-    if (Object.keys(style).length) {
-      ui_rules.style = style;
-    }
-    const imagery = parse("imagery");
-    if (imagery !== undefined) {
-      ui_rules.imagery = imagery;
-    }
-    const strict = parse("constraints-strict");
-    if (strict !== undefined) {
-      ui_rules.strict_constraints = strict;
-    }
-    const fin = parse("checklist-final");
-    if (fin !== undefined) {
-      ui_rules.final_check = fin;
-    }
-
-    const out: Record<string, unknown> = {};
-    if (meta) {
-      out.meta = meta;
-    }
-    if (Object.keys(ui_rules).length) {
-      out.ui_rules = ui_rules;
-    }
     return out;
   }
 
   async exportMarkdownGuidelines(): Promise<string> {
     const doc = await this.exportMergedGuidelines();
     const lines: string[] = [];
-    lines.push("# Bufab UI Guidelines (from LanceDB)");
+    lines.push("# Bufab UI Guidelines");
+    lines.push("");
+    lines.push(`**Version**: ${doc.version}`);
     lines.push("");
 
-    const meta = doc.meta as Record<string, unknown> | undefined;
-    if (meta) {
-      lines.push("## Meta");
-      lines.push(...renderMarkdownValue(meta));
+    const ds = doc.designSystem as Record<string, unknown> | undefined;
+    if (ds) {
+      lines.push("## Design System");
+      lines.push(...renderMarkdownValue(ds));
       lines.push("");
     }
 
-    const ui = doc.ui_rules as Record<string, unknown> | undefined;
-    if (!ui) {
-      return lines.join("\n").trim();
-    }
-
-    if (ui.layout !== undefined) {
-      lines.push("## Layout");
-      lines.push(...renderMarkdownValue(ui.layout));
-      lines.push("");
-    }
-
-    const components = ui.components as Record<string, unknown> | undefined;
-    if (components) {
-      lines.push("## Components");
-      const preferredOrder = [
-        "header",
-        "hero",
-        "sections",
-        "footer",
-      ];
-      const keys = [
-        ...preferredOrder.filter((k) => Object.prototype.hasOwnProperty.call(components, k)),
-        ...Object.keys(components).filter((k) => !preferredOrder.includes(k)),
-      ];
-      for (const key of keys) {
-        if (key === "sections") {
-          const sec = components.sections as Record<string, unknown> | undefined;
-          const types = sec?.types as Record<string, unknown> | undefined;
-          if (!types) {
-            continue;
-          }
-          lines.push("### Section Types");
-          for (const [sectionType, spec] of Object.entries(types)) {
-            lines.push(`#### ${titleFromSlug(sectionType)}`);
-            lines.push(...renderMarkdownValue(spec));
-            lines.push("");
-          }
-          continue;
-        }
+    const components = doc.componentRules as Record<string, unknown> | undefined;
+    if (components && Object.keys(components).length) {
+      lines.push("## Component Rules");
+      for (const [key, spec] of Object.entries(components)) {
         lines.push(`### ${titleFromSlug(key)}`);
-        lines.push(...renderMarkdownValue(components[key]));
+        lines.push(...renderMarkdownValue(spec));
         lines.push("");
       }
     }
 
-    if (ui.style !== undefined) {
-      lines.push("## Style");
-      lines.push(...renderMarkdownValue(ui.style));
-      lines.push("");
-    }
-    if (ui.imagery !== undefined) {
-      lines.push("## Imagery");
-      lines.push(...renderMarkdownValue(ui.imagery));
-      lines.push("");
-    }
-    if (ui.strict_constraints !== undefined) {
-      lines.push("## Strict Constraints");
-      lines.push(...renderMarkdownValue(ui.strict_constraints));
-      lines.push("");
-    }
-    if (ui.final_check !== undefined) {
-      lines.push("## Final Check");
-      lines.push(...renderMarkdownValue(ui.final_check));
+    const rules = doc.crossApplicationRules as unknown[];
+    if (rules && rules.length) {
+      lines.push("## Cross-Application Rules");
+      for (const r of rules) {
+        if (typeof r === "object" && r !== null && "rule" in r) {
+          lines.push(`- ${String((r as any).rule)}`);
+        } else {
+          lines.push(`- ${JSON.stringify(r)}`);
+        }
+      }
       lines.push("");
     }
 
