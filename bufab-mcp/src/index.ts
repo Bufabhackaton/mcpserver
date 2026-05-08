@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -252,8 +253,10 @@ function defaultSetupEnvironmentSourceDir(): string {
 
 function setupEnvSourceId(sourceDirAbs: string): string {
   const raw = basename(sourceDirAbs) || "project";
-  const id = raw.toLowerCase().replace(/[^a-z0-9._~-]+/g, "-").replace(/^-+|-+$/g, "");
-  return id || "project";
+  const id = raw.toLowerCase().replace(/[^a-z0-9._~-]+/g, "-").replace(/^-+|-+$/g, "") || "project";
+  // Include a stable suffix derived from the absolute path to avoid basename collisions.
+  const digest = createHash("sha256").update(resolve(sourceDirAbs)).digest("hex").slice(0, 12);
+  return `${id}-${digest}`;
 }
 
 function encodeResourcePath(relPath: string): string {
@@ -274,7 +277,7 @@ function isSetupEnvironmentPath(relPath: string): boolean {
 
 function isSetupEnvironmentConfigFile(relPath: string): boolean {
   if (relPath === ".clinerules" || relPath.startsWith(".clinerules/")) return true;
-  if (relPath.startsWith(".claude/")) return true;
+  if (relPath === ".claude" || relPath.startsWith(".claude/")) return true;
   return (
     relPath === ".cursor/mcp.json" ||
     relPath === ".cursor/hooks.json" ||
