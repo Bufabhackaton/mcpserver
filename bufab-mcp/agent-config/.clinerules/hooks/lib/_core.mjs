@@ -13,7 +13,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const VALIDATOR_PATH_CANDIDATES = [
   // Default expected layout: <workspace>/bufab-mcp/scripts/validate.mjs
   resolve(__dirname, "..", "..", "..", "bufab-mcp", "scripts", "validate.mjs"),
-  // This repository layout: <workspace>/../Guidlines/bufab-mcp/scripts/validate.mjs
+  // Nested layout (e.g. start_template_project): <workspace>/mcpserver/bufab-mcp/scripts/validate.mjs
+  resolve(__dirname, "..", "..", "..", "mcpserver", "bufab-mcp", "scripts", "validate.mjs"),
+  // Sibling layout: <workspace>/../Guidlines/bufab-mcp/scripts/validate.mjs
   resolve(__dirname, "..", "..", "..", "..", "Guidlines", "bufab-mcp", "scripts", "validate.mjs"),
 ];
 
@@ -154,16 +156,18 @@ function missingGuidelinesReminder(details) {
 }
 
 function buildReminderFromGuidelines(guidelines) {
+  if (!guidelines || typeof guidelines !== "object") return null;
   const constraints = guidelines?.ui_rules?.strict_constraints;
-  if (!Array.isArray(constraints) || constraints.length === 0) return null;
-  const version = guidelines?.meta?.version;
+  const version = guidelines?.meta?.version ?? guidelines?.version;
   const lines = [
     `[Bufab UI guidelines are active in this repo${version ? ` (v${version})` : ""}]`,
     "",
-    "Strict constraints (each blocker violation is a -15 score penalty; PR cannot merge):",
   ];
-  for (const c of constraints) lines.push(`- ${c}`);
-  lines.push("");
+  if (Array.isArray(constraints) && constraints.length > 0) {
+    lines.push("Strict constraints (each blocker violation is a -15 score penalty; PR cannot merge):");
+    for (const c of constraints) lines.push(`- ${c}`);
+    lines.push("");
+  }
   lines.push("Before writing UI code, call the bufab-mcp tools:");
   lines.push("- ui_section_spec(section_type) for the section you are about to build");
   lines.push("- ui_token(name) for any color or spacing value");
