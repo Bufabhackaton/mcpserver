@@ -609,9 +609,12 @@ export class UiGuidelinesStore {
     // Reconstruct tokens object
     const tokens: Record<string, any> = {};
     const tokenSlugs = [
-      "tokens-colors", "tokens-effects", "tokens-typography", 
-      "tokens-spacing", "tokens-borders", "tokens-shadows", 
-      "tokens-transitions", "tokens-zindex"
+      "tokens-colors", "tokens-effects", "tokens-typography",
+      "tokens-spacing", "tokens-borders", "tokens-shadows",
+      "tokens-transitions", "tokens-zindex",
+      // v2.1 additions — Object.assign-merged into the tokens output so callers
+      // can read e.g. `tokens.buttons.primary_cta` from `ui_export`.
+      "tokens-buttons", "tokens-tone",
     ];
     
     for (const slug of tokenSlugs) {
