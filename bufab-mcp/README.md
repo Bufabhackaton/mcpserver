@@ -236,6 +236,43 @@ UI LanceDB starts empty by design (no implicit seed from JSON files).
 - Populate data explicitly using `ui_upsert` (one or more fragments such as `spec-meta`, `layout`, `section-*`, `tokens-*`).
 - `BUFAB_UI_FORCE_RESEED=1` only clears existing UI rows on startup; it does not auto-import data.
 
+## Architecture data bootstrap behavior
+
+Architecture LanceDB (`.lancedb-arch` / `BUFAB_ARCH_DB_PATH`) starts **empty**: the server creates tables on first open, but **does not insert profiles**. Empty tables look small on disk (~few KB per table); that is normal until you seed.
+
+**Why `arch_list` is `[]` and `arch_search` returns nothing:** there are no `arch_profiles` rows and no `arch_chunks` until the first successful `arch_upsert` with a `requirements_json` body.
+
+**Seed one profile (MCP tool `arch_upsert`):**
+
+- `slug`: stable id, e.g. `default`
+- `title`: human label, e.g. `Default product stack`
+- `requirements_json`: **string** containing JSON (stringify the object your client expects)
+
+Example payload (object shape; pass as a single JSON string in `requirements_json`):
+
+```json
+{
+  "language": "go",
+  "database": "sqlite",
+  "sqlite_driver": "modernc.org/sqlite",
+  "cgo_allowed": false,
+  "frontend_framework": "react",
+  "css_framework": "tailwind"
+}
+```
+
+A copy-paste template lives at [`data/arch-profile-default.example.json`](data/arch-profile-default.example.json).
+
+After seeding:
+
+1. `arch_list` / `arch_get` / `arch_export_markdown` (with `arch_slug`) return real data.
+2. `arch_search` can return hits (first call may download the embedding model; allow network).
+3. After code edits, call `arch_validate_files` with `arch_slug` and `files` (path + content).
+
+There is **no** `arch_force_reseed` env flag; delete or `arch_delete` profiles if you need to reset.
+
+**`rules_list` is `[]`:** same idea—infrastructure rules are only present after `rules_upsert` (or a populated `BUFAB_RULES_DB_PATH`). Architecture and rules stores are independent.
+
 ## Tools
 
 | Name | Purpose |
