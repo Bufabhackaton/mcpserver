@@ -1,9 +1,45 @@
 {
   "name": "bufab-mcp",
   "version": "1.0.0",
-  "private": true,
+  "private": false,
   "type": "module",
-  "description": "MCP server: Azure WAF (waf_guidelines), infrastructure rules (rules_* / BUFAB_RULES_DB_PATH), UI guidelines fragments (ui_* / ui_section_spec / ui_token / ui_export / ui_export_markdown / BUFAB_UI_DB_PATH, BUFAB_UI_FORCE_RESEED). Env: BUFAB_EMBEDDING_MODEL, BUFAB_UI_EMBEDDING_MODEL.",
+  "description": "MCP server that exposes Bufab's design system (UI guidelines, tokens, section specs), infrastructure rules, and Azure Bicep validation. Includes a UI guideline validator usable via `bufab-mcp validate <file>`.",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/Bufabhackaton/mcpserver",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Bufabhackaton/mcpserver.git",
+    "directory": "bufab-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/Bufabhackaton/mcpserver/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "bufab",
+    "design-system",
+    "ui-guidelines",
+    "azure",
+    "bicep"
+  ],
+  "bin": {
+    "bufab-mcp": "./bin/bufab-mcp.mjs"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "scripts/install-bicep.mjs",
+    "scripts/validate.mjs",
+    "scripts/seed-ui-rules.mjs",
+    "agent-config/",
+    ".lancedb/",
+    ".lancedb-ui/",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
@@ -11,7 +47,8 @@
     "postinstall": "node scripts/install-bicep.mjs",
     "verify": "node scripts/mcp-smoke.mjs",
     "verify:ui": "node scripts/ui-seed-verify.mjs",
-    "test:validator": "node scripts/validate-test.mjs"
+    "test:validator": "node scripts/validate-test.mjs",
+    "prepublishOnly": "npm run build"
   },
   "engines": {
     "node": ">=18"
