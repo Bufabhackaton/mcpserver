@@ -5,7 +5,8 @@ MCP (Model Context Protocol) server that exposes:
 1. **`waf_guidelines`** — Azure Well-Architected Framework guidance via the official [`@azure/mcp`](https://www.npmjs.com/package/@azure/mcp) child process, plus a static Bufab overlay from `data/bufab-infrastructure-appendix.md` when present.
 2. **Infrastructure rules** — LanceDB-backed CRUD and semantic search (`rules_*`).
 3. **UI guidelines** — LanceDB-backed fragments managed via MCP tools (`ui_*`, including `ui_section_spec`, `ui_token`, `ui_export`, `ui_export_markdown`).
-4. **Agent config resources** — `.claude`, `.clinerules`, and `.cursor` files exposed as MCP resources via server-owned `bufab-agent-config://...` URIs.
+4. **Architecture requirements** — versioned architecture profiles and deterministic file-change validation (`arch_*`, including `arch_validate_files` and `arch_export_markdown`).
+5. **Agent config resources** — `.claude`, `.clinerules`, and `.cursor` files exposed as MCP resources via server-owned `bufab-agent-config://...` URIs.
 
 Transport: **stdio** (standard MCP over stdin/stdout).
 --
@@ -56,7 +57,8 @@ Add a server entry pointing at the built `dist/index.js`. Example (from the pare
       "command": "node",
       "args": ["${workspaceFolder}/bufab-mcp/dist/index.js"],
       "env": {
-        "BUFAB_UI_FORCE_RESEED": "0"
+        "BUFAB_UI_FORCE_RESEED": "0",
+        "BUFAB_ARCH_DB_PATH": "${workspaceFolder}/bufab-mcp/.lancedb-arch"
       }
     }
   }
@@ -118,6 +120,7 @@ For Cursor, create `.cursor/mcp.json` in the new repo:
         "BUFAB_AGENT_CONFIG_SOURCE_DIR": "${workspaceFolder}",
         "BUFAB_UI_DB_PATH": "${workspaceFolder}/bufab-mcp/.lancedb-ui",
         "BUFAB_RULES_DB_PATH": "${workspaceFolder}/bufab-mcp/.lancedb",
+        "BUFAB_ARCH_DB_PATH": "${workspaceFolder}/bufab-mcp/.lancedb-arch",
         "BUFAB_UI_FORCE_RESEED": "0"
       }
     }
@@ -137,6 +140,7 @@ For Cline or another client, add the same server definition to that client's MCP
         "BUFAB_AGENT_CONFIG_SOURCE_DIR": "/absolute/path/to/new-repo",
         "BUFAB_UI_DB_PATH": "/absolute/path/to/new-repo/bufab-mcp/.lancedb-ui",
         "BUFAB_RULES_DB_PATH": "/absolute/path/to/new-repo/bufab-mcp/.lancedb",
+        "BUFAB_ARCH_DB_PATH": "/absolute/path/to/new-repo/bufab-mcp/.lancedb-arch",
         "BUFAB_UI_FORCE_RESEED": "0"
       }
     }
@@ -214,9 +218,11 @@ chmod +x .clinerules/hooks/PostToolUse .clinerules/hooks/UserPromptSubmit
 |----------|-------------|
 | `BUFAB_UI_DB_PATH` | UI guidelines LanceDB directory. Default: `<package>/.lancedb-ui`. |
 | `BUFAB_RULES_DB_PATH` | Infrastructure rules LanceDB directory. Default: `<package>/.lancedb`. |
+| `BUFAB_ARCH_DB_PATH` | Architecture requirements LanceDB directory. Default: `<package>/.lancedb-arch`. |
 | `BUFAB_UI_FORCE_RESEED` | Set to `1` to clear existing UI guideline rows on startup (useful before rebuilding via `ui_upsert`). |
 | `BUFAB_EMBEDDING_MODEL` | Embedding model id for rules (default `Xenova/all-MiniLM-L6-v2`). |
 | `BUFAB_UI_EMBEDDING_MODEL` | Overrides the UI embedding model; falls back to `BUFAB_EMBEDDING_MODEL` then the same default. |
+| `BUFAB_ARCH_EMBEDDING_MODEL` | Overrides the architecture embedding model; falls back to `BUFAB_EMBEDDING_MODEL` then the same default. |
 | `BUFAB_AZURE_MCP_COMMAND` | Command to spawn the Azure MCP child (default `npx`). |
 | `BUFAB_AZURE_MCP_PACKAGE` | Package passed to npx (default `@azure/mcp@latest`). |
 | `BUFAB_AZURE_MCP_SERVER_ARGS` | Extra whitespace-separated arguments appended to the Azure MCP `server start` invocation. |
@@ -340,7 +346,8 @@ Add the same server entry as in .cursor/mcp.json, but with absolute paths for th
          "args": ["/absolute/path/to/bufab-mcp/dist/index.js"],
          "env": {
            "BUFAB_UI_DB_PATH": "/absolute/path/to/bufab-mcp/.lancedb-ui",
-           "BUFAB_RULES_DB_PATH": "/absolute/path/to/bufab-mcp/.lancedb"
+           "BUFAB_RULES_DB_PATH": "/absolute/path/to/bufab-mcp/.lancedb",
+           "BUFAB_ARCH_DB_PATH": "/absolute/path/to/bufab-mcp/.lancedb-arch"
          }
        }
      }
