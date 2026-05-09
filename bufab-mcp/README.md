@@ -54,16 +54,15 @@ Add a server entry pointing at the built `dist/index.js`. Example (from the pare
   "mcpServers": {
     "bufab-mcp": {
       "command": "node",
-      "args": ["${workspaceFolder}/bufab-mcp/dist/index.js"],
-      "env": {
-        "BUFAB_UI_FORCE_RESEED": "0"
-      }
+      "args": ["${workspaceFolder}/bufab-mcp/dist/index.js"]
     }
   }
 }
 ```
 
-Use **absolute paths** if your client does not expand variables.
+Use **absolute paths** if your client does not expand variables. Override the
+LanceDB locations or other defaults via the env vars listed below if needed —
+out-of-the-box the server resolves them as siblings of `dist/`.
 
 ### Other clients
 
@@ -113,13 +112,7 @@ For Cursor, create `.cursor/mcp.json` in the new repo:
   "mcpServers": {
     "bufab-mcp": {
       "command": "node",
-      "args": ["${workspaceFolder}/bufab-mcp/dist/index.js"],
-      "env": {
-        "BUFAB_AGENT_CONFIG_SOURCE_DIR": "${workspaceFolder}",
-        "BUFAB_UI_DB_PATH": "${workspaceFolder}/bufab-mcp/.lancedb-ui",
-        "BUFAB_RULES_DB_PATH": "${workspaceFolder}/bufab-mcp/.lancedb",
-        "BUFAB_UI_FORCE_RESEED": "0"
-      }
+      "args": ["${workspaceFolder}/bufab-mcp/dist/index.js"]
     }
   }
 }
@@ -132,17 +125,16 @@ For Cline or another client, add the same server definition to that client's MCP
   "mcpServers": {
     "bufab-mcp": {
       "command": "node",
-      "args": ["/absolute/path/to/new-repo/bufab-mcp/dist/index.js"],
-      "env": {
-        "BUFAB_AGENT_CONFIG_SOURCE_DIR": "/absolute/path/to/new-repo",
-        "BUFAB_UI_DB_PATH": "/absolute/path/to/new-repo/bufab-mcp/.lancedb-ui",
-        "BUFAB_RULES_DB_PATH": "/absolute/path/to/new-repo/bufab-mcp/.lancedb",
-        "BUFAB_UI_FORCE_RESEED": "0"
-      }
+      "args": ["/absolute/path/to/new-repo/bufab-mcp/dist/index.js"]
     }
   }
 }
 ```
+
+The LanceDB locations and the agent-config source directory default to siblings
+of `dist/` and the bundled `bufab-mcp/agent-config/`, respectively. Set the
+env vars in the table below only if you need to override those defaults (e.g.
+sharing a single MCP binary across multiple project clones).
 
 ### 4. Export and apply the agent hook config
 
@@ -322,21 +314,19 @@ Open the file it returns:
 open "/Users/<you>/Library/Application Support/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
 ```
 
-Add the same server entry as in .cursor/mcp.json, but with absolute paths for the LanceDB directories:
+Add the same server entry as in .cursor/mcp.json. Use an absolute path to
+`dist/index.js`; LanceDB locations are resolved as siblings of `dist/` by
+default, so no env block is required:
 
 ```json
 {
-     "mcpServers": {
-       "bufab-mcp": {
-         "command": "node",
-         "args": ["/absolute/path/to/bufab-mcp/dist/index.js"],
-         "env": {
-           "BUFAB_UI_DB_PATH": "/absolute/path/to/bufab-mcp/.lancedb-ui",
-           "BUFAB_RULES_DB_PATH": "/absolute/path/to/bufab-mcp/.lancedb"
-         }
-       }
-     }
-   }
+  "mcpServers": {
+    "bufab-mcp": {
+      "command": "node",
+      "args": ["/absolute/path/to/bufab-mcp/dist/index.js"]
+    }
+  }
+}
 ```
 
 Save the file — Cline picks it up automatically, no restart needed.

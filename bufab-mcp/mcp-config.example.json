@@ -2,12 +2,7 @@
   "mcpServers": {
     "bufab-mcp": {
       "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/Guidlines/bufab-mcp/dist/index.js"],
-      "env": {
-        "BUFAB_RULES_DB_PATH": "/ABSOLUTE/PATH/TO/your-rules.lancedb",
-        "BUFAB_UI_DB_PATH": "/ABSOLUTE/PATH/TO/your-ui.lancedb",
-        "BUFAB_UI_FORCE_RESEED": "0"
-      }
+      "args": ["/ABSOLUTE/PATH/TO/Guidlines/bufab-mcp/dist/index.js"]
     }
   }
 }
