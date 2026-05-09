@@ -289,11 +289,7 @@ function isSetupEnvironmentConfigFile(relPath: string): boolean {
   if (relPath === ".gitattributes") return true;
   if (relPath === ".clinerules" || relPath.startsWith(".clinerules/")) return true;
   if (relPath === ".claude" || relPath.startsWith(".claude/")) return true;
-  return (
-    relPath === ".cursor/mcp.json" ||
-    relPath === ".cursor/hooks.json" ||
-    relPath.startsWith(".cursor/rules/")
-  );
+  return relPath === ".cursor/hooks.json" || relPath.startsWith(".cursor/rules/");
 }
 
 function guessTextMimeType(relPath: string): string {
@@ -515,7 +511,7 @@ server.registerResource(
   {
     title: "Setup environment file",
     description:
-      "Reads exported agent configuration files under .claude, .clinerules, .cursor, or .gitattributes from a source directory.",
+      "Reads exported agent configuration files under .claude, .clinerules, .cursor (hooks.json and rules/* only), or .gitattributes. Does not export .cursor/mcp.json — configure the MCP server once in the client (global settings), not per-repo.",
     mimeType: "text/plain",
   },
   async (uri) => ({
@@ -528,7 +524,7 @@ server.registerTool(
   {
     title: "Setup environment (export project config)",
     description:
-      "Exports .claude/.clinerules/.cursor/.gitattributes from a source directory as JSON (base64 file contents) so a client can apply them to set up a project. This tool does not modify any files.",
+      "Exports .claude/.clinerules/.cursor (hooks + rules only)/.gitattributes from a source directory as JSON (base64 file contents). Omits .cursor/mcp.json — use the client's global MCP config to point at bufab-mcp and shared BUFAB_* LanceDB paths. This tool does not modify any files.",
     inputSchema: {
       source_dir: z
         .string()

@@ -6,7 +6,7 @@ MCP (Model Context Protocol) server that exposes:
 2. **Infrastructure rules** — LanceDB-backed CRUD and semantic search (`rules_*`).
 3. **UI guidelines** — LanceDB-backed fragments managed via MCP tools (`ui_*`, including `ui_section_spec`, `ui_token`, `ui_export`, `ui_export_markdown`).
 4. **Architecture requirements** — versioned architecture profiles and deterministic file-change validation (`arch_*`, including `arch_validate_files` and `arch_export_markdown`).
-5. **Agent config resources** — `.claude`, `.clinerules`, and `.cursor` files exposed as MCP resources via server-owned `bufab-agent-config://...` URIs.
+5. **Agent config resources** — `.claude`, `.clinerules`, `.cursor` hooks/rules, and `.gitattributes` exposed as MCP resources via server-owned `bufab-agent-config://...` URIs. **Per-repo export does not include `.cursor/mcp.json`**; register `bufab-mcp` once in the client’s **global** MCP settings.
 
 Transport: **stdio** (standard MCP over stdin/stdout).
 --
@@ -44,111 +44,69 @@ node dist/index.js
 
 The server speaks JSON-RPC over stdio and waits for the client to drive the session.
 
-## Configure an MCP client
+## Configure an MCP client (global)
 
-### Cursor
+Configure **`bufab-mcp` once** in your MCP client (Cursor user/global MCP settings, Cline MCP settings, etc.). Application repos should **not** rely on copying `bufab-mcp` or a per-project `.cursor/mcp.json` from `setup_environment`.
 
-Add a server entry pointing at the built `dist/index.js`. Example (from the parent repo’s `.cursor/mcp.json` pattern):
+- Use **absolute paths** to a single install of `bufab-mcp/dist/index.js`.
+- Point **`BUFAB_RULES_DB_PATH`**, **`BUFAB_UI_DB_PATH`**, and **`BUFAB_ARCH_DB_PATH`** at **shared** LanceDB directories (or one central checkout) so every workspace sees the same rules and architecture profiles.
+
+See **`mcp-config.example.json`** in this directory for a full template.
+
+Example shape (replace paths):
 
 ```json
 {
   "mcpServers": {
     "bufab-mcp": {
       "command": "node",
-      "args": ["${workspaceFolder}/bufab-mcp/dist/index.js"],
+      "args": ["/absolute/path/to/bufab-mcp/dist/index.js"],
       "env": {
-        "BUFAB_UI_FORCE_RESEED": "0",
-        "BUFAB_ARCH_DB_PATH": "${workspaceFolder}/bufab-mcp/.lancedb-arch"
+        "BUFAB_RULES_DB_PATH": "/absolute/path/to/shared/.lancedb",
+        "BUFAB_UI_DB_PATH": "/absolute/path/to/shared/.lancedb-ui",
+        "BUFAB_ARCH_DB_PATH": "/absolute/path/to/shared/.lancedb-arch",
+        "BUFAB_UI_FORCE_RESEED": "0"
       }
     }
   }
 }
 ```
 
-Use **absolute paths** if your client does not expand variables.
-
-### Other clients
-
-Use `command`: `node`, `args`: `["/absolute/path/to/bufab-mcp/dist/index.js"]`, and the same `env` keys as below. See **`mcp-config.example.json`** in this directory for a template with optional LanceDB path overrides.
-
 ## Set up a new repository from scratch
 
-Use this when a new application repository should use the Bufab MCP tools and the deterministic agent hooks.
+Use this when a new application repository should use **Bufab hooks and validators**, while **`bufab-mcp` stays a single global install** and **rules/UI/arch data** live in **shared LanceDB paths** referenced by that MCP config.
 
-### 1. Choose the MCP location
+### 1. One-time: install and build `bufab-mcp`
 
-The supported default layout is:
-
-```text
-<new-repo>/
-├── bufab-mcp/
-├── .cursor/
-├── .claude/
-└── .clinerules/
-```
-
-The hook adapters discover the validator at `<new-repo>/bufab-mcp/scripts/validate.mjs`. If you do not want to copy `bufab-mcp` into the new repo, keep this `Guidlines` repository as a sibling of the new repo; the adapters also check `../Guidlines/bufab-mcp/scripts/validate.mjs`.
-
-The agent hook bootstrap files are bundled with this MCP under `bufab-mcp/agent-config`. You can fetch them as MCP resources; you do not need to manually copy `.cursor`, `.claude`, or `.clinerules` from another repository.
-
-The UI and infrastructure guideline data lives in LanceDB directories. When copying `bufab-mcp`, include `bufab-mcp/.lancedb-ui` and `bufab-mcp/.lancedb` if they are populated. If those directories are not inside the copied MCP package, set `BUFAB_UI_DB_PATH` and `BUFAB_RULES_DB_PATH` to populated absolute paths in the MCP client config.
-
-### 2. Install and build the MCP
-
-From the new repo, after adding or symlinking `bufab-mcp`:
+On the machine (or CI image) that runs Cursor/Cline:
 
 ```bash
-cd bufab-mcp
+cd /path/to/bufab-mcp
 npm install
 npm run build
 npm run verify
 ```
 
-`npm run verify` checks that the MCP starts and exposes its tools/resources over stdio. First use may download the embedding model cache.
+Register the server in the client’s **global** MCP settings with absolute paths, as in **`mcp-config.example.json`**. Optionally run `npm run seed:arch` (and your own `rules_*` / `ui_*` population) so shared databases are not empty.
 
-### 3. Add the MCP client config
+### 2. Layout for an application repo (hooks only)
 
-For Cursor, create `.cursor/mcp.json` in the new repo:
+Typical layout **without** vendoring `bufab-mcp`:
 
-```json
-{
-  "mcpServers": {
-    "bufab-mcp": {
-      "command": "node",
-      "args": ["${workspaceFolder}/bufab-mcp/dist/index.js"],
-      "env": {
-        "BUFAB_AGENT_CONFIG_SOURCE_DIR": "${workspaceFolder}",
-        "BUFAB_UI_DB_PATH": "${workspaceFolder}/bufab-mcp/.lancedb-ui",
-        "BUFAB_RULES_DB_PATH": "${workspaceFolder}/bufab-mcp/.lancedb",
-        "BUFAB_ARCH_DB_PATH": "${workspaceFolder}/bufab-mcp/.lancedb-arch",
-        "BUFAB_UI_FORCE_RESEED": "0"
-      }
-    }
-  }
-}
+```text
+<app-repo>/
+├── .cursor/           ← hooks.json (and optional rules/*.mdc)
+├── .claude/           ← optional
+└── .clinerules/       ← hook shims + lib/
 ```
 
-For Cline or another client, add the same server definition to that client's MCP settings. If the client does not expand `${workspaceFolder}`, use absolute paths:
+The hook adapters discover the validator at `<app-repo>/bufab-mcp/scripts/validate.mjs` **if** you symlink or copy that subtree; otherwise they fall back to paths such as `../Guidlines/bufab-mcp/scripts/validate.mjs` (see hook `lib` for discovery). You do **not** need a per-repo MCP definition.
 
-```json
-{
-  "mcpServers": {
-    "bufab-mcp": {
-      "command": "node",
-      "args": ["/absolute/path/to/new-repo/bufab-mcp/dist/index.js"],
-      "env": {
-        "BUFAB_AGENT_CONFIG_SOURCE_DIR": "/absolute/path/to/new-repo",
-        "BUFAB_UI_DB_PATH": "/absolute/path/to/new-repo/bufab-mcp/.lancedb-ui",
-        "BUFAB_RULES_DB_PATH": "/absolute/path/to/new-repo/bufab-mcp/.lancedb",
-        "BUFAB_ARCH_DB_PATH": "/absolute/path/to/new-repo/bufab-mcp/.lancedb-arch",
-        "BUFAB_UI_FORCE_RESEED": "0"
-      }
-    }
-  }
-}
-```
+### 3. Shared guideline data
 
-### 4. Export and apply the agent hook config
+UI, infrastructure rules, and architecture profiles live under **`BUFAB_UI_DB_PATH`**, **`BUFAB_RULES_DB_PATH`**, and **`BUFAB_ARCH_DB_PATH`**. Point those env vars at the same directories from your **global** MCP server entry so every project uses one source of truth.
+
+### 4. Export and apply the agent hook config (no `mcp.json`)
 
 Use the MCP agent config resources to create the hook config in the new repo. There are two supported discovery paths:
 
@@ -161,7 +119,7 @@ Use the MCP agent config resources to create the hook config in the new repo. Th
 }
 ```
 
-Both paths discover `.cursor`, `.claude`, `.clinerules`, and `.gitattributes` files. For each resource, call `resources/read` and write the returned content to the same relative path in the new repo.
+Both paths discover `.claude`, `.clinerules`, `.cursor` (**`hooks.json` and `rules/*` only**), and `.gitattributes`. **`.cursor/mcp.json` is not exported** — MCP is configured globally. For each resource, call `resources/read` and write the returned content to the same relative path in the new repo.
 
 `setup_environment` also returns a JSON payload with:
 
@@ -175,8 +133,8 @@ If your client cannot read MCP resources, decode `files[].content_base64` from t
 The expected exported files include:
 
 ```text
-.cursor/mcp.json
 .cursor/hooks.json
+.cursor/rules/          (if present in the template)
 .claude/settings.json
 .clinerules/hooks/
 .gitattributes
@@ -204,7 +162,7 @@ chmod +x .clinerules/hooks/PostToolUse .clinerules/hooks/UserPromptSubmit
 ### 5. Verify the new repo
 
 1. Open the new repo as the workspace root in Cursor, Cline, or Claude Code.
-2. Confirm the MCP client lists `bufab-mcp` and exposes tools such as `ui_export`, `ui_search`, `rules_search`, and `waf_guidelines`.
+2. Confirm **global** MCP lists `bufab-mcp` and exposes tools such as `ui_export`, `ui_search`, `rules_search`, and `waf_guidelines`.
 3. Call `ui_export` once. If it reports missing UI data, fix `BUFAB_UI_DB_PATH` or populate the UI guidelines via `ui_upsert`.
 4. Ask the agent to create a test CSS file with `linear-gradient(...)` or `border-radius: 16px`.
 5. Confirm the hooks report a Bufab guideline violation:
@@ -308,7 +266,7 @@ There is **no** `arch_force_reseed` env flag; delete or `arch_delete` profiles i
 | `ui_token` | Design token or dotted path (`name`). |
 | `ui_export` | Merged export of the current UI guideline object. |
 | `ui_export_markdown` | Human-readable markdown export of current UI fragments. |
-| `setup_environment` | Export `.claude`, `.clinerules`, `.cursor`, and `.gitattributes` files from a source directory. If the requested directory has no config, it checks parent directories, the bundled `bufab-mcp/agent-config` template, the MCP process cwd, and `BUFAB_AGENT_CONFIG_SOURCE_DIR`. Each file includes a server-owned `resource_uri` readable through MCP `resources/read`. |
+| `setup_environment` | Export `.claude`, `.clinerules`, `.cursor` (`hooks.json` and `rules/*` only), and `.gitattributes` from a source directory. **Does not export `.cursor/mcp.json`.** If the requested directory has no config, it checks parent directories, the bundled `bufab-mcp/agent-config` template, the MCP process cwd, and `BUFAB_AGENT_CONFIG_SOURCE_DIR`. Each file includes a server-owned `resource_uri` readable through MCP `resources/read`. |
 
 ## Resources
 
@@ -316,7 +274,7 @@ There is **no** `arch_force_reseed` env flag; delete or `arch_delete` profiles i
 |--------------|---------|
 | `bufab-agent-config://{source}/{+path}` | Reads a single exported agent config file. `source` is a server-owned project id and `path` is a relative file path under `.claude`, `.clinerules`, `.cursor`, or `.gitattributes`. |
 
-`resources/list` advertises discovered config files as resources. By default it exposes the bundled `bufab-mcp/agent-config` template. To avoid exposing a whole editor cache when a custom source directory is used, `.cursor` discovery is limited to `.cursor/mcp.json`, `.cursor/hooks.json`, and `.cursor/rules/*`; the total exported config list is capped.
+`resources/list` advertises discovered config files as resources. By default it exposes the bundled `bufab-mcp/agent-config` template. To avoid exposing a whole editor cache when a custom source directory is used, `.cursor` discovery is limited to `.cursor/hooks.json` and `.cursor/rules/*` (not `mcp.json`); the total exported config list is capped.
 
 `setup_environment` returns resource URIs for discovered files:
 
@@ -383,7 +341,7 @@ Open the file it returns:
 open "/Users/<you>/Library/Application Support/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
 ```
 
-Add the same server entry as in .cursor/mcp.json, but with absolute paths for the LanceDB directories:
+Add the same server entry as in your **global** Cursor MCP config, with absolute paths for `bufab-mcp/dist/index.js` and the LanceDB directories:
 
 ```json
 {
