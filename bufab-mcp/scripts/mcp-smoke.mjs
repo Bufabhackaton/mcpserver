@@ -14,6 +14,7 @@ const server = join(root, "dist", "index.js");
 const tmp = await mkdtemp(join(tmpdir(), "bufab-mcp-smoke-"));
 await writeFile(join(tmp, ".clinerules"), "smoke-rule\n", "utf8");
 await writeFile(join(tmp, ".claude"), "smoke-claude\n", "utf8");
+await writeFile(join(tmp, "AGENTS.md"), "# smoke AGENTS\n", "utf8");
 
 const child = spawn(process.execPath, [server], {
   stdio: ["pipe", "pipe", "inherit"],
@@ -114,6 +115,9 @@ try {
     if (!listedUris.some((uri) => uri.endsWith("/.claude"))) {
       throw new Error(`resources/list did not include .claude: ${listedUris.join(", ")}`);
     }
+    if (!listedUris.some((uri) => uri.endsWith("AGENTS.md"))) {
+      throw new Error(`resources/list did not include AGENTS.md: ${listedUris.join(", ")}`);
+    }
     console.log("resources/list OK:", listedUris.join(", "));
 
     const setup = await request("tools/call", {
@@ -132,6 +136,18 @@ try {
     }
     if (!payload.files?.some((file) => file.path === ".claude")) {
       throw new Error(`setup_environment did not include .claude: ${text}`);
+    }
+    const agentsEntry = payload.files?.find((file) => file.path === "AGENTS.md");
+    if (!agentsEntry?.resource_uri) {
+      throw new Error(`setup_environment did not include AGENTS.md with resource_uri: ${text}`);
+    }
+    const agentsRead = await request("resources/read", { uri: agentsEntry.resource_uri });
+    if (agentsRead.error) {
+      throw new Error(JSON.stringify(agentsRead.error));
+    }
+    const agentsText = agentsRead.result?.contents?.[0]?.text;
+    if (typeof agentsText !== "string" || !agentsText.includes("smoke AGENTS")) {
+      throw new Error(`resources/read AGENTS.md unexpected: ${JSON.stringify(agentsText)}`);
     }
     const resource = await request("resources/read", { uri });
     if (resource.error) {

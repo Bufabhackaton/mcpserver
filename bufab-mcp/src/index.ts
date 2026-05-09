@@ -245,7 +245,7 @@ type SetupEnvFile = {
   executable: boolean;
 };
 
-const SETUP_ENV_ROOTS = [".claude", ".clinerules", ".cursor", ".gitattributes"];
+const SETUP_ENV_ROOTS = [".claude", ".clinerules", ".cursor", ".gitattributes", "AGENTS.md"];
 const SETUP_ENV_RESOURCE_TEMPLATE = "bufab-agent-config://{source}/{+path}";
 const MAX_SETUP_ENV_FILES = 200;
 const setupEnvSourceDirs = new Map<string, string>();
@@ -286,6 +286,7 @@ function isSetupEnvironmentPath(relPath: string): boolean {
 }
 
 function isSetupEnvironmentConfigFile(relPath: string): boolean {
+  if (relPath === "AGENTS.md") return true;
   if (relPath === ".gitattributes") return true;
   if (relPath === ".clinerules" || relPath.startsWith(".clinerules/")) return true;
   if (relPath === ".claude" || relPath.startsWith(".claude/")) return true;
@@ -511,7 +512,7 @@ server.registerResource(
   {
     title: "Setup environment file",
     description:
-      "Reads exported agent configuration files under .claude, .clinerules, .cursor (hooks.json and rules/* only), or .gitattributes. Does not export .cursor/mcp.json — configure the MCP server once in the client (global settings), not per-repo.",
+      "Reads exported agent configuration files under .claude, .clinerules, .cursor (hooks.json and rules/* only), .gitattributes, or repo-root AGENTS.md. Does not export .cursor/mcp.json — configure the MCP server once in the client (global settings), not per-repo.",
     mimeType: "text/plain",
   },
   async (uri) => ({
@@ -524,7 +525,7 @@ server.registerTool(
   {
     title: "Setup environment (export project config)",
     description:
-      "Exports .claude/.clinerules/.cursor (hooks + rules only)/.gitattributes from a source directory as JSON (base64 file contents). Omits .cursor/mcp.json — use the client's global MCP config to point at bufab-mcp and shared BUFAB_* LanceDB paths. This tool does not modify any files.",
+      "Exports .claude/.clinerules/.cursor (hooks + rules only)/.gitattributes/AGENTS.md from a source directory as JSON (base64 file contents). Omits .cursor/mcp.json — use the client's global MCP config to point at bufab-mcp and shared BUFAB_* LanceDB paths. This tool does not modify any files.",
     inputSchema: {
       source_dir: z
         .string()

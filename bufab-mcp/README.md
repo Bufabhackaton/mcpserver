@@ -6,7 +6,7 @@ MCP (Model Context Protocol) server that exposes:
 2. **Infrastructure rules** — LanceDB-backed CRUD and semantic search (`rules_*`).
 3. **UI guidelines** — LanceDB-backed fragments managed via MCP tools (`ui_*`, including `ui_section_spec`, `ui_token`, `ui_export`, `ui_export_markdown`).
 4. **Architecture requirements** — versioned architecture profiles and deterministic file-change validation (`arch_*`, including `arch_validate_files` and `arch_export_markdown`).
-5. **Agent config resources** — `.claude`, `.clinerules`, `.cursor` hooks/rules, and `.gitattributes` exposed as MCP resources via server-owned `bufab-agent-config://...` URIs. **Per-repo export does not include `.cursor/mcp.json`**; register `bufab-mcp` once in the client’s **global** MCP settings.
+5. **Agent config resources** — `.claude`, `.clinerules`, `.cursor` hooks/rules, `.gitattributes`, and repo-root **`AGENTS.md`** exposed as MCP resources via server-owned `bufab-agent-config://...` URIs. **Per-repo export does not include `.cursor/mcp.json`**; register `bufab-mcp` once in the client’s **global** MCP settings.
 
 Transport: **stdio** (standard MCP over stdin/stdout).
 --
@@ -119,7 +119,7 @@ Use the MCP agent config resources to create the hook config in the new repo. Th
 }
 ```
 
-Both paths discover `.claude`, `.clinerules`, `.cursor` (**`hooks.json` and `rules/*` only**), and `.gitattributes`. **`.cursor/mcp.json` is not exported** — MCP is configured globally. For each resource, call `resources/read` and write the returned content to the same relative path in the new repo.
+Both paths discover `.claude`, `.clinerules`, `.cursor` (**`hooks.json` and `rules/*` only**), `.gitattributes`, and repo-root **`AGENTS.md`** (if present). **`.cursor/mcp.json` is not exported** — MCP is configured globally. For each resource, call `resources/read` and write the returned content to the same relative path in the new repo.
 
 `setup_environment` also returns a JSON payload with:
 
@@ -133,6 +133,7 @@ If your client cannot read MCP resources, decode `files[].content_base64` from t
 The expected exported files include:
 
 ```text
+AGENTS.md
 .cursor/hooks.json
 .cursor/rules/          (if present in the template)
 .claude/settings.json
@@ -266,13 +267,13 @@ There is **no** `arch_force_reseed` env flag; delete or `arch_delete` profiles i
 | `ui_token` | Design token or dotted path (`name`). |
 | `ui_export` | Merged export of the current UI guideline object. |
 | `ui_export_markdown` | Human-readable markdown export of current UI fragments. |
-| `setup_environment` | Export `.claude`, `.clinerules`, `.cursor` (`hooks.json` and `rules/*` only), and `.gitattributes` from a source directory. **Does not export `.cursor/mcp.json`.** If the requested directory has no config, it checks parent directories, the bundled `bufab-mcp/agent-config` template, the MCP process cwd, and `BUFAB_AGENT_CONFIG_SOURCE_DIR`. Each file includes a server-owned `resource_uri` readable through MCP `resources/read`. |
+| `setup_environment` | Export `.claude`, `.clinerules`, `.cursor` (`hooks.json` and `rules/*` only), `.gitattributes`, and repo-root **`AGENTS.md`** from a source directory. **Does not export `.cursor/mcp.json`.** If the requested directory has no config, it checks parent directories, the bundled `bufab-mcp/agent-config` template, the MCP process cwd, and `BUFAB_AGENT_CONFIG_SOURCE_DIR`. Each file includes a server-owned `resource_uri` readable through MCP `resources/read`. |
 
 ## Resources
 
 | URI template | Purpose |
 |--------------|---------|
-| `bufab-agent-config://{source}/{+path}` | Reads a single exported agent config file. `source` is a server-owned project id and `path` is a relative file path under `.claude`, `.clinerules`, `.cursor`, or `.gitattributes`. |
+| `bufab-agent-config://{source}/{+path}` | Reads a single exported agent config file. `source` is a server-owned project id and `path` is a relative file path under `.claude`, `.clinerules`, `.cursor`, `.gitattributes`, or **`AGENTS.md`** at the template root. |
 
 `resources/list` advertises discovered config files as resources. By default it exposes the bundled `bufab-mcp/agent-config` template. To avoid exposing a whole editor cache when a custom source directory is used, `.cursor` discovery is limited to `.cursor/hooks.json` and `.cursor/rules/*` (not `mcp.json`); the total exported config list is capped.
 
