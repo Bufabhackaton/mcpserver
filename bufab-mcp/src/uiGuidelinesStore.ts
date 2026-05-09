@@ -648,6 +648,21 @@ export class UiGuidelinesStore {
       componentRules: components
     };
 
+    // Surface ui_rules.* fragments so consumers (e.g. the UserPromptSubmit
+    // hook) that follow the canonical guideline shape can find their data.
+    const uiRules: Record<string, unknown> = {};
+    const strictConstraints = parse("ui-rules-strict-constraints");
+    if (Array.isArray(strictConstraints)) {
+      uiRules.strict_constraints = strictConstraints;
+    }
+    const finalCheck = parse("ui-rules-final-check");
+    if (Array.isArray(finalCheck)) {
+      uiRules.final_check = finalCheck;
+    }
+    if (Object.keys(uiRules).length) {
+      out.ui_rules = uiRules;
+    }
+
     return out;
   }
 
