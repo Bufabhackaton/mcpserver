@@ -392,7 +392,7 @@ function detectOffPaletteHex(content, file, out) {
       file,
       line: lineOf(content, m.index),
       matched: m[0],
-      message: `Color ${m[0]} is not in the Bufab token set (COLOR-03). Replace with an approved token (e.g. #1f3c46, #4ecdc4, #325c6d, #a8d8e8, #FFFFFF).`,
+      message: `Color ${m[0]} is not in the Bufab token set (COLOR-03). Replace with an approved token (call ui_token / ui_export to see the live set).`,
     });
   }
 }
