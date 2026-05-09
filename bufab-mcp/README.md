@@ -69,6 +69,145 @@ Use **absolute paths** if your client does not expand variables.
 
 Use `command`: `node`, `args`: `["/absolute/path/to/bufab-mcp/dist/index.js"]`, and the same `env` keys as below. See **`mcp-config.example.json`** in this directory for a template with optional LanceDB path overrides.
 
+## Set up a new repository from scratch
+
+Use this when a new application repository should use the Bufab MCP tools and the deterministic agent hooks.
+
+### 1. Choose the MCP location
+
+The supported default layout is:
+
+```text
+<new-repo>/
+├── bufab-mcp/
+├── .cursor/
+├── .claude/
+└── .clinerules/
+```
+
+The hook adapters discover the validator at `<new-repo>/bufab-mcp/scripts/validate.mjs`. If you do not want to copy `bufab-mcp` into the new repo, keep this `Guidlines` repository as a sibling of the new repo; the adapters also check `../Guidlines/bufab-mcp/scripts/validate.mjs`.
+
+The agent hook bootstrap files are bundled with this MCP under `bufab-mcp/agent-config`. You can fetch them as MCP resources; you do not need to manually copy `.cursor`, `.claude`, or `.clinerules` from another repository.
+
+The UI and infrastructure guideline data lives in LanceDB directories. When copying `bufab-mcp`, include `bufab-mcp/.lancedb-ui` and `bufab-mcp/.lancedb` if they are populated. If those directories are not inside the copied MCP package, set `BUFAB_UI_DB_PATH` and `BUFAB_RULES_DB_PATH` to populated absolute paths in the MCP client config.
+
+### 2. Install and build the MCP
+
+From the new repo, after adding or symlinking `bufab-mcp`:
+
+```bash
+cd bufab-mcp
+npm install
+npm run build
+npm run verify
+```
+
+`npm run verify` checks that the MCP starts and exposes its tools/resources over stdio. First use may download the embedding model cache.
+
+### 3. Add the MCP client config
+
+For Cursor, create `.cursor/mcp.json` in the new repo:
+
+```json
+{
+  "mcpServers": {
+    "bufab-mcp": {
+      "command": "node",
+      "args": ["${workspaceFolder}/bufab-mcp/dist/index.js"],
+      "env": {
+        "BUFAB_AGENT_CONFIG_SOURCE_DIR": "${workspaceFolder}",
+        "BUFAB_UI_DB_PATH": "${workspaceFolder}/bufab-mcp/.lancedb-ui",
+        "BUFAB_RULES_DB_PATH": "${workspaceFolder}/bufab-mcp/.lancedb",
+        "BUFAB_UI_FORCE_RESEED": "0"
+      }
+    }
+  }
+}
+```
+
+For Cline or another client, add the same server definition to that client's MCP settings. If the client does not expand `${workspaceFolder}`, use absolute paths:
+
+```json
+{
+  "mcpServers": {
+    "bufab-mcp": {
+      "command": "node",
+      "args": ["/absolute/path/to/new-repo/bufab-mcp/dist/index.js"],
+      "env": {
+        "BUFAB_AGENT_CONFIG_SOURCE_DIR": "/absolute/path/to/new-repo",
+        "BUFAB_UI_DB_PATH": "/absolute/path/to/new-repo/bufab-mcp/.lancedb-ui",
+        "BUFAB_RULES_DB_PATH": "/absolute/path/to/new-repo/bufab-mcp/.lancedb",
+        "BUFAB_UI_FORCE_RESEED": "0"
+      }
+    }
+  }
+}
+```
+
+### 4. Export and apply the agent hook config
+
+Use the MCP agent config resources to create the hook config in the new repo. There are two supported discovery paths:
+
+1. Call `resources/list`. This advertises the bundled `bufab-mcp/agent-config` files as `bufab-agent-config://...` resources. If `BUFAB_AGENT_CONFIG_SOURCE_DIR` is set, that directory is used instead.
+2. Call the `setup_environment` tool when you need to pass an explicit source directory:
+
+```json
+{
+  "source_dir": "/absolute/path/to/bufab-mcp/agent-config"
+}
+```
+
+Both paths discover `.cursor`, `.claude`, `.clinerules`, and `.gitattributes` files. For each resource, call `resources/read` and write the returned content to the same relative path in the new repo.
+
+`setup_environment` also returns a JSON payload with:
+
+- `files[].path` — target path to create in the new repo.
+- `files[].content_base64` — file content to decode and write.
+- `files[].executable` — whether to preserve the executable bit.
+- `files[].resource_uri` — a server-owned resource URI, for example `bufab-agent-config://...`.
+
+If your client cannot read MCP resources, decode `files[].content_base64` from the `setup_environment` response instead. In both cases, preserve the relative paths and executable bits.
+
+The expected exported files include:
+
+```text
+.cursor/mcp.json
+.cursor/hooks.json
+.claude/settings.json
+.clinerules/hooks/
+.gitattributes
+```
+
+The resources and `setup_environment` are intentionally export-only; they do not modify the target repo.
+
+Add these runtime artifacts to the new repo's `.gitignore`:
+
+```gitignore
+.cursor/.bufab-violations.json
+.claude/settings.local.json
+bufab-mcp/node_modules/
+bufab-mcp/dist/
+bufab-mcp/.tmp/
+bufab-mcp/vendor/bicep/
+```
+
+On macOS/Linux, make sure the Cline hook shims are executable:
+
+```bash
+chmod +x .clinerules/hooks/PostToolUse .clinerules/hooks/UserPromptSubmit
+```
+
+### 5. Verify the new repo
+
+1. Open the new repo as the workspace root in Cursor, Cline, or Claude Code.
+2. Confirm the MCP client lists `bufab-mcp` and exposes tools such as `ui_export`, `ui_search`, `rules_search`, and `waf_guidelines`.
+3. Call `ui_export` once. If it reports missing UI data, fix `BUFAB_UI_DB_PATH` or populate the UI guidelines via `ui_upsert`.
+4. Ask the agent to create a test CSS file with `linear-gradient(...)` or `border-radius: 16px`.
+5. Confirm the hooks report a Bufab guideline violation:
+   - Cursor: check the Hooks output panel and `.cursor/.bufab-violations.json`.
+   - Cline/Claude Code: the next model turn should receive the violation context.
+6. Remove the test file and any temporary violation ledger before committing.
+
 ## Environment variables
 
 | Variable | Description |
@@ -81,7 +220,7 @@ Use `command`: `node`, `args`: `["/absolute/path/to/bufab-mcp/dist/index.js"]`, 
 | `BUFAB_AZURE_MCP_COMMAND` | Command to spawn the Azure MCP child (default `npx`). |
 | `BUFAB_AZURE_MCP_PACKAGE` | Package passed to npx (default `@azure/mcp@latest`). |
 | `BUFAB_AZURE_MCP_SERVER_ARGS` | Extra whitespace-separated arguments appended to the Azure MCP `server start` invocation. |
-| `BUFAB_AGENT_CONFIG_SOURCE_DIR` | Optional source directory used when clients call `resources/list` for exported `.claude`, `.clinerules`, and `.cursor` files. When unset, `resources/list` starts at the parent directory of `bufab-mcp` and uses discovery from there. |
+| `BUFAB_AGENT_CONFIG_SOURCE_DIR` | Optional source directory used when clients call `resources/list` for exported `.claude`, `.clinerules`, `.cursor`, and `.gitattributes` files. When unset, `resources/list` uses the bundled `bufab-mcp/agent-config` template. |
 
 ## UI data bootstrap behavior
 
@@ -110,15 +249,15 @@ UI LanceDB starts empty by design (no implicit seed from JSON files).
 | `ui_token` | Design token or dotted path (`name`). |
 | `ui_export` | Merged export of the current UI guideline object. |
 | `ui_export_markdown` | Human-readable markdown export of current UI fragments. |
-| `setup_environment` | Export `.claude`, `.clinerules`, and `.cursor` files from a source directory. If the requested directory has no config, it checks parent directories, the parent of `bufab-mcp`, the MCP process cwd, and `BUFAB_AGENT_CONFIG_SOURCE_DIR`. Each file includes a server-owned `resource_uri` readable through MCP `resources/read`. |
+| `setup_environment` | Export `.claude`, `.clinerules`, `.cursor`, and `.gitattributes` files from a source directory. If the requested directory has no config, it checks parent directories, the bundled `bufab-mcp/agent-config` template, the MCP process cwd, and `BUFAB_AGENT_CONFIG_SOURCE_DIR`. Each file includes a server-owned `resource_uri` readable through MCP `resources/read`. |
 
 ## Resources
 
 | URI template | Purpose |
 |--------------|---------|
-| `bufab-agent-config://{source}/{+path}` | Reads a single exported agent config file. `source` is a server-owned project id and `path` is a relative file path under `.claude`, `.clinerules`, or `.cursor`. |
+| `bufab-agent-config://{source}/{+path}` | Reads a single exported agent config file. `source` is a server-owned project id and `path` is a relative file path under `.claude`, `.clinerules`, `.cursor`, or `.gitattributes`. |
 
-`resources/list` advertises discovered config files as resources. To avoid exposing a whole editor cache, `.cursor` discovery is limited to `.cursor/mcp.json`, `.cursor/hooks.json`, and `.cursor/rules/*`; the total exported config list is capped.
+`resources/list` advertises discovered config files as resources. By default it exposes the bundled `bufab-mcp/agent-config` template. To avoid exposing a whole editor cache when a custom source directory is used, `.cursor` discovery is limited to `.cursor/mcp.json`, `.cursor/hooks.json`, and `.cursor/rules/*`; the total exported config list is capped.
 
 `setup_environment` returns resource URIs for discovered files:
 
