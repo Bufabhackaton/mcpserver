@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
@@ -236,7 +236,7 @@ type SetupEnvFile = {
   executable: boolean;
 };
 
-const SETUP_ENV_ROOTS = [".claude", ".clinerules", ".cursor"];
+const SETUP_ENV_ROOTS = [".claude", ".clinerules", ".cursor", ".gitattributes"];
 const SETUP_ENV_RESOURCE_TEMPLATE = "bufab-agent-config://{source}/{+path}";
 const MAX_SETUP_ENV_FILES = 200;
 const setupEnvSourceDirs = new Map<string, string>();
@@ -248,7 +248,8 @@ function setupEnvResourceUri(sourceDirAbs: string, relPath: string): string {
 }
 
 function defaultSetupEnvironmentSourceDir(): string {
-  return resolve(__dirname, "..", "..");
+  const bundledConfigDir = resolve(__dirname, "..", "agent-config");
+  return existsSync(bundledConfigDir) ? bundledConfigDir : resolve(__dirname, "..", "..");
 }
 
 function setupEnvSourceId(sourceDirAbs: string): string {
@@ -276,6 +277,7 @@ function isSetupEnvironmentPath(relPath: string): boolean {
 }
 
 function isSetupEnvironmentConfigFile(relPath: string): boolean {
+  if (relPath === ".gitattributes") return true;
   if (relPath === ".clinerules" || relPath.startsWith(".clinerules/")) return true;
   if (relPath === ".claude" || relPath.startsWith(".claude/")) return true;
   return (
@@ -504,7 +506,7 @@ server.registerResource(
   {
     title: "Setup environment file",
     description:
-      "Reads exported agent configuration files under .claude, .clinerules, or .cursor from a source directory.",
+      "Reads exported agent configuration files under .claude, .clinerules, .cursor, or .gitattributes from a source directory.",
     mimeType: "text/plain",
   },
   async (uri) => ({
@@ -517,7 +519,7 @@ server.registerTool(
   {
     title: "Setup environment (export project config)",
     description:
-      "Exports .claude/.clinerules/.cursor from a source directory as JSON (base64 file contents) so a client can apply them to set up a project. This tool does not modify any files.",
+      "Exports .claude/.clinerules/.cursor/.gitattributes from a source directory as JSON (base64 file contents) so a client can apply them to set up a project. This tool does not modify any files.",
     inputSchema: {
       source_dir: z
         .string()
