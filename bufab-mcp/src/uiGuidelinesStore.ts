@@ -46,14 +46,20 @@ function defaultUiDbPath(fromDir: string): string {
 }
 
 let uiEmbedder: TransformersEmbeddingFunction | null = null;
+let uiEmbedderReady: Promise<TransformersEmbeddingFunction> | null = null;
 
 async function getUiEmbedder(): Promise<TransformersEmbeddingFunction> {
-  uiEmbedder ??= new TransformersEmbeddingFunction({
-    model: process.env.BUFAB_UI_EMBEDDING_MODEL ?? process.env.BUFAB_EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2",
-    ndims: UI_CHUNK_EMBED_DIM,
-  });
-  await uiEmbedder.init();
-  return uiEmbedder;
+  if (uiEmbedder) return uiEmbedder;
+  uiEmbedderReady ??= (async () => {
+    const ef = new TransformersEmbeddingFunction({
+      model: process.env.BUFAB_UI_EMBEDDING_MODEL ?? process.env.BUFAB_EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2",
+      ndims: UI_CHUNK_EMBED_DIM,
+    });
+    await ef.init();
+    uiEmbedder = ef;
+    return ef;
+  })();
+  return uiEmbedderReady;
 }
 
 const entitiesSchema = new Schema([

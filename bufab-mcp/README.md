@@ -313,6 +313,8 @@ npm run verify:ui
 - **Slow first request**: embedding model download or LanceDB initialization.
 - **`waf_guidelines` errors**: confirm `npx -y @azure/mcp@latest server start --transport stdio …` works locally and Azure auth is valid.
 - **Missing UI data**: populate UI fragments using `ui_upsert`; if needed, set `BUFAB_UI_FORCE_RESEED=1` once to clear stale rows before repopulating.
+- **`arch_list` returns `[]`**: the architecture LanceDB has no profiles yet. There is no auto-seed; call `arch_upsert` with `requirements_json` to create one. Also confirm `BUFAB_ARCH_DB_PATH` points at the directory you expect (same workspace as `bufab-mcp`); a different repo or missing `bufab-mcp` yields an empty or separate empty DB.
+- **`arch_search` empty**: with no `arch_chunks` rows (no `arch_upsert` that wrote embeddings), search correctly returns no hits. After seeding, allow the first embedding call to finish (MiniLM download + `init()`); ensure the MCP process can reach the network on first use.
 
 ## License
 

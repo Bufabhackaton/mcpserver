@@ -25,16 +25,21 @@ function defaultDbPath(fromDir: string): string {
 }
 
 let archEmbedder: TransformersEmbeddingFunction | null = null;
+/** Ensures only one init runs and all concurrent callers await it (avoids "embedding function not initialized"). */
+let archEmbedderReady: Promise<TransformersEmbeddingFunction> | null = null;
 
 async function getArchEmbedder(): Promise<TransformersEmbeddingFunction> {
-  if (!archEmbedder) {
-    archEmbedder = new TransformersEmbeddingFunction({
+  if (archEmbedder) return archEmbedder;
+  archEmbedderReady ??= (async () => {
+    const ef = new TransformersEmbeddingFunction({
       model: process.env.BUFAB_ARCH_EMBEDDING_MODEL ?? process.env.BUFAB_EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2",
       ndims: ARCH_CHUNK_EMBED_DIM,
     });
-    await archEmbedder.init();
-  }
-  return archEmbedder;
+    await ef.init();
+    archEmbedder = ef;
+    return ef;
+  })();
+  return archEmbedderReady;
 }
 
 const profilesSchema = new Schema([

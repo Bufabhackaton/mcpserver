@@ -25,16 +25,20 @@ function defaultDbPath(fromDir: string): string {
 }
 
 let embedder: TransformersEmbeddingFunction | null = null;
+let embedderReady: Promise<TransformersEmbeddingFunction> | null = null;
 
 async function getEmbedder(): Promise<TransformersEmbeddingFunction> {
-  if (!embedder) {
-    embedder = new TransformersEmbeddingFunction({
+  if (embedder) return embedder;
+  embedderReady ??= (async () => {
+    const ef = new TransformersEmbeddingFunction({
       model: process.env.BUFAB_EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2",
       ndims: CHUNK_EMBED_DIM,
     });
-    await embedder.init();
-  }
-  return embedder;
+    await ef.init();
+    embedder = ef;
+    return ef;
+  })();
+  return embedderReady;
 }
 
 const rulesSchema = new Schema([
