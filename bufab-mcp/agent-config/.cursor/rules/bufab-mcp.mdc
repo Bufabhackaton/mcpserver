@@ -1,0 +1,5 @@
+---
+description: Use Bufab MCP tools for project guidelines
+---
+
+Use **bufab-mcp** when you need infrastructure rules, UI guidelines, architecture requirements, or Azure WAF guidance. Call its MCP tools instead of inventing policies from memory.
