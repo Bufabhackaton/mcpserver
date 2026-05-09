@@ -263,6 +263,14 @@ Example payload (object shape; pass as a single JSON string in `requirements_jso
 
 A copy-paste template lives at [`data/arch-profile-default.example.json`](data/arch-profile-default.example.json).
 
+**Seed from the repo (recommended):** bundled profiles live in [`data/arch-guidelines-seed.json`](data/arch-guidelines-seed.json). After `npm run build`, run:
+
+```bash
+npm run seed:arch
+```
+
+This writes the `default` profile (and any others you add to that file) into `BUFAB_ARCH_DB_PATH` / `.lancedb-arch`, including chunks for `arch_search`.
+
 After seeding:
 
 1. `arch_list` / `arch_get` / `arch_export_markdown` (with `arch_slug`) return real data.

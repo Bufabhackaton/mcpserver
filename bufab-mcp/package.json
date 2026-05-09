@@ -10,6 +10,7 @@
     "dev": "tsx src/index.ts",
     "postinstall": "node scripts/install-bicep.mjs",
     "verify": "node scripts/mcp-smoke.mjs",
+    "seed:arch": "node scripts/seed-arch.mjs",
     "verify:ui": "node scripts/ui-seed-verify.mjs",
     "test:validator": "node scripts/validate-test.mjs"
   },
