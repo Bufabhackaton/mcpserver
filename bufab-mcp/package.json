@@ -1,5 +1,5 @@
 {
-  "name": "bufab-mcp",
+  "name": "@greadcadinho/bufab-mcp",
   "version": "1.0.0",
   "private": false,
   "type": "module",
@@ -24,7 +24,7 @@
     "bicep"
   ],
   "bin": {
-    "bufab-mcp": "./bin/bufab-mcp.mjs"
+    "bufab-mcp": "bin/bufab-mcp.mjs"
   },
   "files": [
     "bin/",
