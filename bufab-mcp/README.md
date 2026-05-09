@@ -235,6 +235,14 @@ UI LanceDB starts empty by design (no implicit seed from JSON files).
 | Name | Purpose |
 |------|---------|
 | `waf_guidelines` | Azure WAF service guidance (optional `service`), plus Bufab appendix when `data/bufab-infrastructure-appendix.md` exists. |
+| `arch_upsert` | Create or update an architecture requirements profile and embeddings. |
+| `arch_get` | Load an architecture profile by `slug` or `arch_id`. |
+| `arch_list` | List architecture profiles, optional `status` filter. |
+| `arch_search` | Semantic search over architecture requirement chunks. |
+| `arch_delete` | Delete an architecture profile and related data. |
+| `arch_validate_requirements` | Validate requirements JSON (errors/warnings + suggested changes). |
+| `arch_validate_files` | Validate requirements against a set of changed files (returns `{violations, summary}`). |
+| `arch_export_markdown` | Human-readable markdown export of architecture requirements + how-to-generate and validation checklist. |
 | `rules_upsert` | Create or update an infrastructure rule and embeddings. |
 | `rules_get` | Load a rule by `slug` or `rule_id`. |
 | `rules_list` | List rules, optional `status` filter. |

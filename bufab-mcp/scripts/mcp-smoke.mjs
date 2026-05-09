@@ -85,6 +85,12 @@ try {
   }
   const names = (tools.result?.tools ?? []).map((t) => t.name);
   console.log("tools/list OK:", names.join(", "));
+  if (!names.includes("arch_validate_requirements")) {
+    throw new Error(`missing arch_validate_requirements; got ${names.join(", ")}`);
+  }
+  if (!names.includes("arch_validate_files")) {
+    throw new Error(`missing arch_validate_files; got ${names.join(", ")}`);
+  }
 
   const templates = await request("resources/templates/list", {});
   if (templates.error) {
@@ -152,6 +158,44 @@ try {
       throw new Error(`setup_environment did not discover parent config: ${discoveredText}`);
     }
     console.log("setup_environment discovery OK:", discoveredPayload.source_dir);
+
+    const req = {
+      language: "go",
+      database: "sqlite",
+      sqlite_driver: "modernc.org/sqlite",
+      cgo_allowed: false,
+    };
+    const validateReq = await request("tools/call", {
+      name: "arch_validate_requirements",
+      arguments: { requirements: req },
+    });
+    if (validateReq.error) {
+      throw new Error(JSON.stringify(validateReq.error));
+    }
+    const validateReqText = validateReq.result?.content?.find((part) => part.type === "text")?.text;
+    const validateReqPayload = JSON.parse(validateReqText);
+    if (validateReqPayload.ok !== true) {
+      throw new Error(`arch_validate_requirements expected ok=true: ${validateReqText}`);
+    }
+
+    const validateFiles = await request("tools/call", {
+      name: "arch_validate_files",
+      arguments: {
+        requirements: req,
+        files: [
+          { path: "go.mod", content: "module example.com/app\n\ngo 1.22\n" },
+          { path: "internal/storage/db.go", content: 'package storage\n\nimport _ \"modernc.org/sqlite\"\n' },
+        ],
+      },
+    });
+    if (validateFiles.error) {
+      throw new Error(JSON.stringify(validateFiles.error));
+    }
+    const validateFilesText = validateFiles.result?.content?.find((part) => part.type === "text")?.text;
+    const validateFilesPayload = JSON.parse(validateFilesText);
+    if (!validateFilesPayload.summary || typeof validateFilesPayload.summary.filesScanned !== "number") {
+      throw new Error(`arch_validate_files returned unexpected payload: ${validateFilesText}`);
+    }
 
     // Guard against source id collisions when different absolute paths share a basename.
     const collisionRoot = await mkdtemp(join(tmpdir(), "bufab-mcp-collision-"));

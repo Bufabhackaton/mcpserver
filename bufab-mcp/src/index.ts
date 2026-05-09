@@ -12,6 +12,9 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { RulesStore } from "./rulesStore.js";
 import { UiGuidelinesStore } from "./uiGuidelinesStore.js";
+import { ArchitectureStore } from "./architectureStore.js";
+import { renderArchitectureMarkdown } from "./architectureMarkdown.js";
+import { validateArchitectureFiles, validateArchitectureRequirementsOnly } from "./architectureValidator.js";
 
 const AZURE_WAF_TOOL = "wellarchitectedframework_serviceguide_get";
 const WAF_GUIDELINES_TOOL = "waf_guidelines";
@@ -28,6 +31,12 @@ let uiStorePromise: Promise<UiGuidelinesStore> | null = null;
 function getUiGuidelinesStore(): Promise<UiGuidelinesStore> {
   uiStorePromise ??= UiGuidelinesStore.open(__dirname);
   return uiStorePromise;
+}
+
+let archStorePromise: Promise<ArchitectureStore> | null = null;
+function getArchitectureStore(): Promise<ArchitectureStore> {
+  archStorePromise ??= ArchitectureStore.open(__dirname);
+  return archStorePromise;
 }
 
 function jsonText(data: unknown): string {
@@ -474,7 +483,7 @@ const server = new McpServer(
   },
   {
     instructions:
-      "Tools: (1) waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) rules_* — infrastructure rules in LanceDB (.lancedb). (3) ui_* (including ui_section_spec, ui_token, ui_export, ui_export_markdown) — UI guidelines fragments in LanceDB (.lancedb-ui). Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_FORCE_RESEED=1 to clear and rebuild UI data via ui_upsert. First embedding use downloads MiniLM via @huggingface/transformers.",
+      "Tools: (1) waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) rules_* — infrastructure rules in LanceDB (.lancedb). (3) ui_* (including ui_section_spec, ui_token, ui_export, ui_export_markdown) — UI guidelines fragments in LanceDB (.lancedb-ui). (4) arch_* — architecture requirements profiles in LanceDB (.lancedb-arch), plus requirements and file-change validation via arch_validate_requirements and arch_validate_files. Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_FORCE_RESEED=1, BUFAB_ARCH_DB_PATH. First embedding use downloads MiniLM via @huggingface/transformers.",
   },
 );
 
@@ -593,6 +602,278 @@ server.registerTool(
     return {
       content: [{ type: "text", text: combined }],
     };
+  },
+);
+
+server.registerTool(
+  "arch_upsert",
+  {
+    title: "Upsert architecture requirements profile",
+    description:
+      "Creates or updates an architecture profile. If requirements_json is omitted, updates title/status/slug metadata only on an existing profile. If requirements_json is set, writes a new version row and re-embeds chunks in LanceDB.",
+    inputSchema: {
+      slug: z.string().describe("Stable slug (unique), e.g. app-go-sqlite."),
+      title: z.string().describe("Short human title."),
+      requirements_json: z
+        .string()
+        .optional()
+        .describe("Requirements JSON string. Required for new profiles; omit for metadata-only updates."),
+      change_summary: z.string().optional().describe("Optional note stored on the new version."),
+      status: z.string().optional().describe("Lifecycle status (default \"active\"), e.g. draft, active, retired."),
+      arch_id: z.string().uuid().optional().describe("Explicit profile UUID when known."),
+    },
+  },
+  async (args) => {
+    try {
+      const store = await getArchitectureStore();
+      const out = await store.upsertProfile({
+        slug: args.slug,
+        title: args.title,
+        requirements_json: args.requirements_json,
+        change_summary: args.change_summary,
+        status: args.status,
+        arch_id: args.arch_id,
+      });
+      return { content: [{ type: "text", text: jsonText(out) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    }
+  },
+);
+
+server.registerTool(
+  "arch_get",
+  {
+    title: "Get architecture requirements profile",
+    description: "Load an architecture profile by slug or arch_id. Optionally include full version history.",
+    inputSchema: {
+      slug: z.string().optional(),
+      arch_id: z.string().uuid().optional(),
+      include_history: z.boolean().optional().describe("Include all versions (sorted newest first). Default false."),
+    },
+  },
+  async (args) => {
+    if (!args.slug?.trim() && !args.arch_id?.trim()) {
+      return { isError: true, content: [{ type: "text", text: "Provide slug or arch_id." }] };
+    }
+    const store = await getArchitectureStore();
+    const row = await store.getProfile({
+      slug: args.slug,
+      arch_id: args.arch_id,
+      include_history: args.include_history ?? false,
+    });
+    if (!row) {
+      return { content: [{ type: "text", text: "(not found)" }] };
+    }
+    return { content: [{ type: "text", text: jsonText(row) }] };
+  },
+);
+
+server.registerTool(
+  "arch_list",
+  {
+    title: "List architecture requirements profiles",
+    description: "List architecture profiles with optional status filter.",
+    inputSchema: {
+      status: z.string().optional().describe("Filter by arch_profiles.status."),
+    },
+  },
+  async (args) => {
+    const store = await getArchitectureStore();
+    const rows = await store.listProfiles(args.status);
+    return { content: [{ type: "text", text: jsonText(rows) }] };
+  },
+);
+
+server.registerTool(
+  "arch_search",
+  {
+    title: "Semantic search architecture requirements",
+    description:
+      "Vector search over chunked architecture requirements JSON (MiniLM embeddings). Optionally restrict to chunks tied to the current published version.",
+    inputSchema: {
+      query: z.string().describe("Natural-language query."),
+      limit: z.number().int().min(1).max(50).optional().describe("Max hits (default 8)."),
+      current_only: z
+        .boolean()
+        .optional()
+        .describe("If true (default), only search chunks for the current version of each profile."),
+    },
+  },
+  async (args) => {
+    try {
+      const store = await getArchitectureStore();
+      const hits = await store.searchProfiles({
+        query: args.query,
+        limit: args.limit,
+        current_only: args.current_only,
+      });
+      return { content: [{ type: "text", text: jsonText(hits) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    }
+  },
+);
+
+server.registerTool(
+  "arch_delete",
+  {
+    title: "Delete architecture requirements profile",
+    description: "Deletes an architecture profile and all versions and chunks from LanceDB.",
+    inputSchema: {
+      slug: z.string().optional(),
+      arch_id: z.string().uuid().optional(),
+    },
+  },
+  async (args) => {
+    if (!args.slug?.trim() && !args.arch_id?.trim()) {
+      return { isError: true, content: [{ type: "text", text: "Provide slug or arch_id." }] };
+    }
+    const store = await getArchitectureStore();
+    const ok = await store.deleteProfile({ slug: args.slug, arch_id: args.arch_id });
+    return { content: [{ type: "text", text: ok ? jsonText({ deleted: true }) : "(not found)" }] };
+  },
+);
+
+server.registerTool(
+  "arch_validate_requirements",
+  {
+    title: "Validate architecture requirements",
+    description:
+      "Validates requirements JSON for consistency (e.g. language/go, sqlite driver vs cgo policy) and returns errors/warnings, normalized requirements, and suggested changes.",
+    inputSchema: {
+      requirements: z.unknown().describe("Requirements object (preferred) OR JSON string."),
+    },
+  },
+  async (args) => {
+    try {
+      const raw = typeof args.requirements === "string" ? JSON.parse(args.requirements) : args.requirements;
+      const out = validateArchitectureRequirementsOnly(raw);
+      return { content: [{ type: "text", text: jsonText(out) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    }
+  },
+);
+
+server.registerTool(
+  "arch_validate_files",
+  {
+    title: "Validate architecture vs changed files",
+    description:
+      "Runs deterministic validation after file changes. Provide either (a) arch_slug to load current requirements, or (b) inline requirements. Returns violations in the same shape as other validators: {violations, summary}.",
+    inputSchema: {
+      arch_slug: z.string().optional().describe("Architecture profile slug to load requirements from."),
+      requirements: z.unknown().optional().describe("Inline requirements object OR JSON string."),
+      files: z
+        .array(
+          z.object({
+            path: z.string().describe("Repo-relative path (for reporting)."),
+            content: z.string().describe("File contents (UTF-8)."),
+          }),
+        )
+        .min(1)
+        .describe("Files to validate (typically changed files)."),
+    },
+  },
+  async (args) => {
+    try {
+      let requirements: unknown = args.requirements;
+      if (typeof requirements === "string") {
+        requirements = JSON.parse(requirements);
+      }
+
+      if ((!requirements || requirements === null) && args.arch_slug?.trim()) {
+        const store = await getArchitectureStore();
+        const row = await store.getProfile({ slug: args.arch_slug.trim(), include_history: false });
+        const ver = row?.current_version as { requirements_json?: string } | undefined;
+        if (!ver?.requirements_json) {
+          return { isError: true, content: [{ type: "text", text: "(not found)" }] };
+        }
+        requirements = JSON.parse(ver.requirements_json);
+      }
+
+      if (!requirements || requirements === null) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: "Provide `requirements` (object or JSON string) or `arch_slug` to load stored requirements.",
+            },
+          ],
+        };
+      }
+
+      const out = validateArchitectureFiles({
+        requirements,
+        files: args.files,
+      });
+      return { content: [{ type: "text", text: jsonText(out) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    }
+  },
+);
+
+server.registerTool(
+  "arch_export_markdown",
+  {
+    title: "Export architecture requirements as markdown",
+    description:
+      "Renders a human-readable markdown document from requirements (inline) or from the current version of a stored architecture profile (by slug).",
+    inputSchema: {
+      arch_slug: z.string().optional().describe("Architecture profile slug to load requirements from."),
+      requirements: z.unknown().optional().describe("Inline requirements object OR JSON string."),
+      title: z.string().optional().describe("Optional title override for the markdown document."),
+    },
+  },
+  async (args) => {
+    try {
+      let requirements: unknown = args.requirements;
+      if (typeof requirements === "string") {
+        requirements = JSON.parse(requirements);
+      }
+
+      let resolvedTitle = args.title;
+      if ((!requirements || requirements === null) && args.arch_slug?.trim()) {
+        const store = await getArchitectureStore();
+        const row = await store.getProfile({ slug: args.arch_slug.trim(), include_history: false });
+        const prof = row?.profile as { title?: string } | undefined;
+        const ver = row?.current_version as { requirements_json?: string } | undefined;
+        if (!ver?.requirements_json) {
+          return { isError: true, content: [{ type: "text", text: "(not found)" }] };
+        }
+        requirements = JSON.parse(ver.requirements_json);
+        resolvedTitle ??= prof?.title;
+      }
+
+      if (!requirements || requirements === null) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: "Provide `requirements` (object or JSON string) or `arch_slug` to load stored requirements.",
+            },
+          ],
+        };
+      }
+
+      const md = renderArchitectureMarkdown({
+        slug: args.arch_slug,
+        title: resolvedTitle,
+        requirements: requirements as any,
+      });
+      return { content: [{ type: "text", text: md }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { isError: true, content: [{ type: "text", text: message }] };
+    }
   },
 );
 
