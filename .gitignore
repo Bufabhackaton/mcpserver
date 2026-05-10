@@ -33,9 +33,9 @@ bufab-mcp/node_modules/
 bufab-mcp/dist/
 bufab-mcp/.tmp/
 bufab-mcp/vendor/bicep/
-bufab-mcp/.lancedb/
-bufab-mcp/.lancedb-ui/
-bufab-mcp/.lancedb-arch/
+#bufab-mcp/.lancedb/
+#bufab-mcp/.lancedb-ui/
+#bufab-mcp/.lancedb-arch/
 
 ### Mac OS ###
 .DS_Store
