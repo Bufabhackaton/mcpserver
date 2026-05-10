@@ -7,8 +7,8 @@
 // Live guidelines: spawn bufab-mcp dist/index.js and call ui_export (see resolveMcpDistEntry).
 // If MCP cannot be reached, validation fails. There is no offline snapshot path.
 //
-// Detects deterministic blocker/warning violations defined in
-// guidelines/bufab_ui_guidelines.md (Part 9 anti-patterns and Parts 3-5 rules).
+// Detects deterministic blocker/warning violations defined by the live UI
+// guidelines export from bufab-mcp (`ui_export`).
 //
 // Usage:
 //   node validate.mjs <path> [<path> ...]            # validate specific files
