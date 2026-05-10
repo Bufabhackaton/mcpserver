@@ -10,15 +10,31 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const VALIDATOR_PATH_CANDIDATES = [
-  // Default expected layout: <workspace>/bufab-mcp/scripts/validate.mjs
-  resolve(__dirname, "..", "..", "..", "bufab-mcp", "scripts", "validate.mjs"),
-  // This repository layout: <workspace>/../Guidlines/bufab-mcp/scripts/validate.mjs
-  resolve(__dirname, "..", "..", "..", "..", "Guidlines", "bufab-mcp", "scripts", "validate.mjs"),
-];
+function validatorAt(root) {
+  return resolve(root, "bufab-mcp", "scripts", "validate.mjs");
+}
 
-export const VALIDATOR_PATH =
-  VALIDATOR_PATH_CANDIDATES.find((p) => existsSync(p)) ?? VALIDATOR_PATH_CANDIDATES[0];
+/**
+ * Find validate.mjs by walking up from this file: at each ancestor, look for the
+ * stable subtree `bufab-mcp/scripts/validate.mjs`. The workspace / repo folder
+ * name (e.g. an optional "mcpserver" root) must not appear in logic — only
+ * `bufab-mcp/...` is assumed stable.
+ */
+function resolveValidatorPath() {
+  const maxHops = 24;
+  let dir = __dirname;
+  for (let i = 0; i < maxHops; i++) {
+    const candidate = validatorAt(dir);
+    if (existsSync(candidate)) return candidate;
+    const parent = resolve(dir, "..");
+    if (parent === dir) break;
+    dir = parent;
+  }
+  // Default relative path used only when missing (stable error messaging).
+  return validatorAt(resolve(__dirname, "..", "..", ".."));
+}
+
+export const VALIDATOR_PATH = resolveValidatorPath();
 
 export async function readStdin() {
   const chunks = [];
