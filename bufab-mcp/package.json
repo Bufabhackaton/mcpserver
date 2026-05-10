@@ -1,6 +1,6 @@
 {
   "name": "@greadcadinho/bufab-mcp",
-  "version": "1.2.0",
+  "version": "1.4.0",
   "private": false,
   "type": "module",
   "description": "MCP server that exposes Bufab's design system (UI guidelines, tokens, section specs), infrastructure rules, and Azure Bicep validation. Includes a UI guideline validator usable via `bufab-mcp validate <file>`.",
@@ -32,6 +32,7 @@
     "data/",
     "scripts/install-bicep.mjs",
     "scripts/validate.mjs",
+    "scripts/setup.mjs",
     "scripts/seed-from-guidelines.mjs",
     "scripts/seed-from-design-tokens.mjs",
     "agent-config/",
