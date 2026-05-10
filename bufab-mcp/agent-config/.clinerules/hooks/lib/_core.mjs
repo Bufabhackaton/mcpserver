@@ -2,6 +2,13 @@
 // Claude Code). Keeps the validator-spawning, BOM-stripping, and report
 // formatting in one place so each adapter only has to translate the
 // tool-specific input/output schema.
+//
+// After `setup_environment` / init:
+//   {PROJECT_NAME}/.clinerules/hooks/lib/_core.mjs
+//   {PROJECT_NAME}/.clinerules/hooks/lib/validate.mjs
+// PROJECT_NAME is the app repo root (folder that contains `.clinerules`).
+// Hooks prefer `hooks/lib/validate.mjs`; else `bufab-mcp/scripts/validate.mjs`
+// walking up ancestors (backward compatible).
 
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -10,31 +17,52 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function validatorAt(root) {
+function validatorBesideCore() {
+  return resolve(__dirname, "validate.mjs");
+}
+
+function validatorAtPkgScripts(root) {
   return resolve(root, "bufab-mcp", "scripts", "validate.mjs");
 }
 
 /**
- * Find validate.mjs by walking up from this file: at each ancestor, look for the
- * stable subtree `bufab-mcp/scripts/validate.mjs`. The workspace / repo folder
- * name (e.g. an optional "mcpserver" root) must not appear in logic — only
- * `bufab-mcp/...` is assumed stable.
+ * Prefer `hooks/lib/validate.mjs` (exported with agent-config). Else walk ancestors
+ * for `bufab-mcp/scripts/validate.mjs`. PROJECT folder naming is not hardcoded.
  */
 function resolveValidatorPath() {
+  const beside = validatorBesideCore();
+  if (existsSync(beside)) return beside;
+
   const maxHops = 24;
   let dir = __dirname;
   for (let i = 0; i < maxHops; i++) {
-    const candidate = validatorAt(dir);
+    const candidate = validatorAtPkgScripts(dir);
     if (existsSync(candidate)) return candidate;
     const parent = resolve(dir, "..");
     if (parent === dir) break;
     dir = parent;
   }
-  // Default relative path used only when missing (stable error messaging).
-  return validatorAt(resolve(__dirname, "..", "..", ".."));
+  return validatorBesideCore();
 }
 
 export const VALIDATOR_PATH = resolveValidatorPath();
+
+/** Next to validate.mjs (hooks/lib or bufab-mcp/scripts). */
+const BUNDLED_GUIDELINES_SNAPSHOT = resolve(dirname(VALIDATOR_PATH), "bufab-ui-guidelines.snapshot.json");
+
+/**
+ * Point validate.mjs at the bundled JSON before `loadGuidelines()` runs. Older
+ * validators only support this path (not built-in offline fallback), and the
+ * spawned PostToolUse child inherits the same env.
+ */
+function ensureBundledGuidelinesEnvFromValidatorDir() {
+  if (process.env.BUFAB_VALIDATOR_GUIDELINES_FILE?.trim()) return;
+  if (existsSync(BUNDLED_GUIDELINES_SNAPSHOT)) {
+    process.env.BUFAB_VALIDATOR_GUIDELINES_FILE = BUNDLED_GUIDELINES_SNAPSHOT;
+  }
+}
+
+ensureBundledGuidelinesEnvFromValidatorDir();
 
 export async function readStdin() {
   const chunks = [];
@@ -156,8 +184,8 @@ function missingGuidelinesReminder(details) {
     details ? `Reason: ${details}` : null,
     "",
     "Fix:",
-    "- build bufab-mcp (`npm -C bufab-mcp run build`)",
-    "- seed UI LanceDB via `ui_upsert` (or ensure BUFAB_UI_DB_PATH points at a populated DB)",
+    "- Prefer live rules: build bufab-mcp (`npm -C bufab-mcp run build`) and ensure `ui_export` works (seed UI LanceDB via `ui_upsert` / BUFAB_UI_DB_PATH).",
+    "- If you only have exported hooks: verify `hooks/lib/bufab-ui-guidelines.snapshot.json` exists next to `validate.mjs` for offline reminder + validation fallback.",
     "",
     "Until this is fixed, treat UI work as blocked (the validator also depends on live MCP guidelines).",
     "",
@@ -205,15 +233,16 @@ function buildReminderFromGuidelines(guidelines) {
 }
 
 // Computed at module load via top-level await. Each hook spawns a fresh node
-// process, so this re-fetches live MCP/LanceDB guidelines on every invocation.
-// If live loading fails (MCP unavailable, empty UI DB, etc.), do not crash hook
-// module initialization — fall back to the static reminder text.
+// process, so guidelines load runs on every invocation.
+// If bufab-ui-guidelines.snapshot.json exists beside validate.mjs, BUFAB_VALIDATOR_GUIDELINES_FILE
+// is set so validate.mjs skips MCP (covers PostToolUse + UserPromptSubmit + older validators).
 let _g = null;
 let _gError = null;
 try {
   if (!existsSync(VALIDATOR_PATH)) {
     throw new Error(`validator not found at ${VALIDATOR_PATH}`);
   }
+  ensureBundledGuidelinesEnvFromValidatorDir();
   const validatorModule = await import(pathToFileURL(VALIDATOR_PATH).href);
   if (typeof validatorModule?.loadGuidelines !== "function") {
     throw new Error(`loadGuidelines() export missing in ${VALIDATOR_PATH}`);
@@ -221,7 +250,9 @@ try {
   _g = await validatorModule.loadGuidelines();
 } catch (e) {
   _gError = e instanceof Error ? e.message : String(e);
-  process.stderr.write(`[bufab] error: failed to load live guidelines for reminder text (${_gError})\n`);
+  process.stderr.write(
+    `[bufab] hook init: guideline reminder unavailable (${_gError}). Deploy bufab-ui-guidelines.snapshot.json next to validate.mjs (or set BUFAB_VALIDATOR_GUIDELINES_FILE), prefer live MCP with built bufab-mcp for current tokens.\n`,
+  );
 }
 export const BUFAB_REMINDER = buildReminderFromGuidelines(_g) ?? missingGuidelinesReminder(_gError);
 

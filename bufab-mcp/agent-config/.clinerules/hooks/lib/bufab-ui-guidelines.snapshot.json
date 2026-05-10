@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "version": "offline-snapshot",
+    "source": "Bundled fallback when bufab-mcp dist/ is unavailable in the workspace. Prefer live MCP + ui_export for current tokens and constraints."
+  },
+  "ui_rules": {
+    "strict_constraints": [
+      "No CSS linear-gradient or radial-gradient for UI fills (anti-pattern AP-03); use flat palette tokens only.",
+      "Border radii beyond the approved discrete scale are blockers (AP-04 — use Bufab spacing/radius tokens).",
+      "No ad-hero scroll listeners attaching to header scroll that fight layout/accessibility expectations (AP-05).",
+      "Do not use accent color tokens outside allowlisted placements (accent misuse — AP-06).",
+      "No custom web fonts loaded outside Bufab typography; font-family stacks must resolve to approved Roboto/system stacks (TYPE-01).",
+      "All visible hex fills must resolve to Bufab-approved palette tokens — no stray off-palette values (COLOR-03).",
+      "Before composing UI surfaces, fetch section specs via bufab-mcp ui_section_spec and tokens via ui_token.",
+      "For anything not listed above, ui_search MUST be used before committing non-trivial styling."
+    ],
+    "style": {
+      "colors": {
+        "primary": "#1f3c46",
+        "primary_dark": "#0D3349",
+        "secondary": "#325c6d",
+        "accent": "#E8610A",
+        "accent_dark": "#C4520A",
+        "background": "#F4F6F8",
+        "text": "#1A1A1A",
+        "border": "#D0D7DE",
+        "white": "#FFFFFF",
+        "black": "#000000",
+        "muted": "#5C6B7A"
+      }
+    }
+  }
+}

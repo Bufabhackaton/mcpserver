@@ -12,7 +12,8 @@
     "verify": "node scripts/mcp-smoke.mjs",
     "seed:arch": "node scripts/seed-arch.mjs",
     "verify:ui": "node scripts/ui-seed-verify.mjs",
-    "test:validator": "node scripts/validate-test.mjs"
+    "test:validator": "node scripts/validate-test.mjs",
+    "sync:validator-hooks": "cp scripts/validate.mjs scripts/bufab-ui-guidelines.snapshot.json agent-config/.clinerules/hooks/lib/"
   },
   "engines": {
     "node": ">=18"

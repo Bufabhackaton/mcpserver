@@ -100,7 +100,7 @@ Typical layout **without** vendoring `bufab-mcp`:
 └── .clinerules/       ← hook shims + lib/
 ```
 
-The hook adapters discover the validator at `<app-repo>/bufab-mcp/scripts/validate.mjs` **if** you symlink or copy that subtree; otherwise they fall back to paths such as `../Guidlines/bufab-mcp/scripts/validate.mjs` (see hook `lib` for discovery). You do **not** need a per-repo MCP definition.
+Exported hooks bundle `validate.mjs` and **`bufab-ui-guidelines.snapshot.json`** next to `_core.mjs` under `.clinerules/hooks/lib/`. Hooks use `validate.mjs` from that folder first; otherwise they walk ancestors for `<ancestor>/bufab-mcp/scripts/validate.mjs`. If `dist/index.js` cannot be resolved or `ui_export` fails (typical bare client repo without a checkout), the validator loads the **offline snapshot** so reminders and checks still run (tokens/constraints lag live LanceDB until you add a built `bufab-mcp` beside the project — see `BUFAB_MCP_DIST` / `BUFAB_MCP_ROOT`). You do **not** need a per-repo **`mcp.json`**.
 
 ### 3. Shared guideline data
 
@@ -267,7 +267,7 @@ There is **no** `arch_force_reseed` env flag; delete or `arch_delete` profiles i
 | `ui_token` | Design token or dotted path (`name`). |
 | `ui_export` | Merged export of the current UI guideline object. |
 | `ui_export_markdown` | Human-readable markdown export of current UI fragments. |
-| `setup_environment` | Export `.claude`, `.clinerules`, `.cursor` (`hooks.json` and `rules/*` only), `.gitattributes`, and repo-root **`AGENTS.md`** from a source directory. **Does not export `.cursor/mcp.json`.** If the requested directory has no config, it checks parent directories, the bundled `bufab-mcp/agent-config` template, the MCP process cwd, and `BUFAB_AGENT_CONFIG_SOURCE_DIR`. Each file includes a server-owned `resource_uri` readable through MCP `resources/read`. |
+| `setup_environment` | Export `.claude`, `.clinerules`, `.cursor` (`hooks.json` and `rules/*` only), `.gitattributes`, and repo-root **`AGENTS.md`** from a source directory. **Does not export `.cursor/mcp.json`.** The bundled `bufab-mcp/agent-config` template is merged with whichever directory yields config (requested path → parents → template → cwd …): missing defaults such as **`AGENTS.md`** are filled from the bundle; existing files in the overlay win per path. Each file includes a server-owned `resource_uri` readable through MCP `resources/read`. |
 
 ## Resources
 

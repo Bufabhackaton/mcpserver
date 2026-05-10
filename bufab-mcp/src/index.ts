@@ -388,6 +388,18 @@ function candidateSetupEnvironmentDirs(requestedSourceDirAbs: string): string[] 
   return [...candidates];
 }
 
+function mergeSetupEnvPayloads(
+  base: SetupEnvFile[],
+  overlay: SetupEnvFile[] | undefined,
+): SetupEnvFile[] {
+  if (!overlay?.length) return [...base];
+  if (!base.length) return [...overlay];
+  const byPath = new Map<string, SetupEnvFile>();
+  for (const f of base) byPath.set(f.path, f);
+  for (const f of overlay) byPath.set(f.path, f);
+  return [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
+}
+
 async function exportSetupEnvironmentWithDiscovery(requestedSourceDirAbs: string): Promise<{
   requested_source_dir: string;
   source_dir: string;
@@ -396,27 +408,32 @@ async function exportSetupEnvironmentWithDiscovery(requestedSourceDirAbs: string
   files: SetupEnvFile[];
 }> {
   const searched: string[] = [];
+  /** Bundled defaults (always includes repo-root AGENTS.md when packaged). */
+  const bundledPayload = await exportSetupEnvironment(defaultSetupEnvironmentSourceDir());
+  let overlayPayload: { source_dir: string; files: SetupEnvFile[] } | null = null;
+  let overlayCandidateDir: string | null = null;
 
   for (const candidate of candidateSetupEnvironmentDirs(requestedSourceDirAbs)) {
     searched.push(candidate);
     const payload = await exportSetupEnvironment(candidate);
     if (payload.files.length > 0) {
-      return {
-        requested_source_dir: requestedSourceDirAbs,
-        source_dir: payload.source_dir,
-        discovery_used: candidate !== requestedSourceDirAbs,
-        searched_source_dirs: searched,
-        files: payload.files,
-      };
+      overlayPayload = payload;
+      overlayCandidateDir = candidate;
+      break;
     }
   }
 
+  const files =
+    overlayPayload ?
+      mergeSetupEnvPayloads(bundledPayload.files, overlayPayload.files)
+    : bundledPayload.files;
+
   return {
     requested_source_dir: requestedSourceDirAbs,
-    source_dir: requestedSourceDirAbs,
-    discovery_used: false,
+    source_dir: overlayPayload?.source_dir ?? bundledPayload.source_dir,
+    discovery_used: overlayCandidateDir !== null && overlayCandidateDir !== requestedSourceDirAbs,
     searched_source_dirs: searched,
-    files: [],
+    files,
   };
 }
 
@@ -525,7 +542,7 @@ server.registerTool(
   {
     title: "Setup environment (export project config)",
     description:
-      "Exports .claude/.clinerules/.cursor (hooks + rules only)/.gitattributes/AGENTS.md from a source directory as JSON (base64 file contents). Omits .cursor/mcp.json — use the client's global MCP config to point at bufab-mcp and shared BUFAB_* LanceDB paths. This tool does not modify any files.",
+      "Exports .claude/.clinerules/.cursor (hooks + rules only)/.gitattributes/AGENTS.md as JSON (base64). Merges the bundled bufab-mcp/agent-config template with the first discovered directory that has config: overlay files win per path; missing template files (e.g. repo-root AGENTS.md) come from the bundle. Omits .cursor/mcp.json. This tool does not modify any files.",
     inputSchema: {
       source_dir: z
         .string()
