@@ -5,8 +5,7 @@
 // Also shipped beside hooks: agent-config /.clinerules/hooks/lib/validate.mjs
 //
 // Live guidelines: spawn bufab-mcp dist/index.js and call ui_export (see resolveMcpDistEntry).
-// If dist is missing or MCP fails, loads bufab-ui-guidelines.snapshot.json next to this file
-// (exported with agent-config) so Cline/Cursor hooks still get reminders + basic validation.
+// If MCP cannot be reached, validation fails. There is no offline snapshot path.
 //
 // Detects deterministic blocker/warning violations defined in
 // guidelines/bufab_ui_guidelines.md (Part 9 anti-patterns and Parts 3-5 rules).
@@ -40,10 +39,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // "load on startup" effectively means "load on every invocation".
 //
 // Guidelines are loaded via MCP (`ui_export`) only. If loading fails,
-// validation fails with exit code 2. There is no token fallback path.
+// validation fails with exit code 2.
 // ---------------------------------------------------------------------------
 
 const MCP_CALL_TIMEOUT_MS = 30000;
+// Test-only override used by validate-test.mjs.
 const TEST_GUIDELINES_FILE_ENV = "BUFAB_VALIDATOR_GUIDELINES_FILE";
 
 let _cachedGuidelines; // undefined = not attempted; null = attempted, missing/invalid
@@ -157,11 +157,6 @@ function loadGuidelinesFromMcp(mcpBinary) {
   });
 }
 
-/** Shipped beside validate.mjs in agent-config (and bufab-mcp/scripts) when live MCP/ui_export cannot run. */
-function resolveBundledOfflineGuidelinesPath() {
-  return resolvePath(__dirname, "bufab-ui-guidelines.snapshot.json");
-}
-
 export async function loadGuidelines() {
   if (_cachedGuidelines !== undefined) return _cachedGuidelines;
   _guidelinesLoadError = null;
@@ -184,46 +179,28 @@ export async function loadGuidelines() {
   }
 
   const mcpBinary = resolveMcpDistEntry();
-  if (mcpBinary) {
-    try {
-      const fromMcp = await loadGuidelinesFromMcp(mcpBinary);
-      if (fromMcp) {
-        _cachedGuidelines = fromMcp;
-        return _cachedGuidelines;
-      }
-      _guidelinesLoadError = "[bufab] MCP source returned empty guidelines";
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      _guidelinesLoadError = `[bufab] MCP source failed (${detail})`;
-    }
-  } else {
+  if (!mcpBinary) {
     _guidelinesLoadError =
-      "MCP dist not found. Build bufab-mcp (`npm run build`) or set BUFAB_MCP_DIST / BUFAB_MCP_ROOT; " +
-        "optional offline snapshot will be attempted next.";
+      "MCP dist not found. Build bufab-mcp (`npm run build`) or set BUFAB_MCP_DIST / BUFAB_MCP_ROOT.";
+    throw new Error(
+      `${_guidelinesLoadError} Validation requires live MCP ui_export data; offline snapshots are disabled.`,
+    );
   }
-
-  const offlineAbs = resolveBundledOfflineGuidelinesPath();
-  if (existsSync(offlineAbs)) {
-    try {
-      const fromBundled = JSON.parse(readFileSync(offlineAbs, "utf8"));
-      _cachedGuidelines = fromBundled;
-      _guidelinesLoadError = null;
-      process.stderr.write(
-        `[bufab] Using offline UI guideline snapshot (${offlineAbs}); for live LanceDB/token rules ensure bufab-mcp is built ui_export-ready.\n`,
-      );
+  try {
+    const fromMcp = await loadGuidelinesFromMcp(mcpBinary);
+    if (fromMcp) {
+      _cachedGuidelines = fromMcp;
       return _cachedGuidelines;
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      _guidelinesLoadError =
-        `${_guidelinesLoadError ?? "[bufab] offline snapshot failed"}; could not parse ${offlineAbs}: ${detail}`;
-      throw new Error(_guidelinesLoadError);
     }
+    _guidelinesLoadError = "[bufab] MCP source returned empty guidelines";
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    _guidelinesLoadError = `[bufab] MCP source failed (${detail})`;
   }
 
-  const message =
-    _guidelinesLoadError ??
-    "[bufab] MCP unavailable and no bundled bufab-ui-guidelines.snapshot.json next to validate.mjs.";
-  throw new Error(message + " Hooks need either live MCP guidelines or that snapshot beside validate.mjs.");
+  throw new Error(
+    `${_guidelinesLoadError ?? "[bufab] MCP source failed"} Validation requires live MCP ui_export data.`,
+  );
 }
 
 function extractAllTokenHex(guidelines) {

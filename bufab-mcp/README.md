@@ -100,7 +100,7 @@ Typical layout **without** vendoring `bufab-mcp`:
 └── .clinerules/       ← hook shims + lib/
 ```
 
-Exported hooks bundle `validate.mjs` and **`bufab-ui-guidelines.snapshot.json`** next to `_core.mjs` under `.clinerules/hooks/lib/`. Hooks use `validate.mjs` from that folder first; otherwise they walk ancestors for `<ancestor>/bufab-mcp/scripts/validate.mjs`. If `dist/index.js` cannot be resolved or `ui_export` fails (typical bare client repo without a checkout), the validator loads the **offline snapshot** so reminders and checks still run (tokens/constraints lag live LanceDB until you add a built `bufab-mcp` beside the project — see `BUFAB_MCP_DIST` / `BUFAB_MCP_ROOT`). You do **not** need a per-repo **`mcp.json`**.
+Exported hooks bundle `validate.mjs` next to `_core.mjs` under `.clinerules/hooks/lib/`. Hooks use `validate.mjs` from that folder first; otherwise they walk ancestors for `<ancestor>/bufab-mcp/scripts/validate.mjs`. Validation requires a built `bufab-mcp/dist/index.js` so `ui_export` can run; if MCP is unavailable, validation fails instead of falling back to a local snapshot. You do **not** need a per-repo **`mcp.json`**.
 
 ### 3. Shared guideline data
 
