@@ -3,19 +3,11 @@
 // (default: ../data/bufab-design-tokens.json — the v2.0.1 Glassmorphism
 // on Dark Teal source).
 //
-// This seeder produces a HYBRID state:
-//   - tokens / components / layout / writingStyle  ← v2.0.1 (glassmorphism)
-//   - ui_rules.{strict_constraints, final_check}   ← hardcoded v2.1 corporate
-//
-// The hybrid is intentional: v2.0.1 ships the visual primitives (cyan
-// accent, glass surfaces, gradient page background) while v2.1's
-// strict_constraints layer on top as guardrails ("no gradients anywhere",
-// "no saturated colors outside #E8610A"). Yes, those constraints
-// contradict the v2.0.1 tokens (cyan IS saturated, gradient IS the page
-// background). That's by design — strict_constraints serve as a forcing
-// function during the cutover from glassmorphism to corporate-flat;
-// agents reading both signals know to discount the glass primitives in
-// favor of the constraints. Re-evaluate after the design direction stabilizes.
+// Single source of truth: every fragment we write to LanceDB is derived
+// from the design-tokens file. The strict_constraints and final_check
+// arrays below are hand-written to be CONSISTENT with the v2.0.1 theme
+// (so the validator's token set won't pick up legacy hex codes like
+// #E8610A through the back door of constraint prose).
 //
 // Usage:
 //   node scripts/seed-from-design-tokens.mjs [path/to/bufab-design-tokens.json]
@@ -51,37 +43,37 @@ if (!meta) {
 }
 const version = meta.version ?? "unknown";
 
-// v2.1 strict_constraints + final_check, hardcoded so the seeder is
-// self-contained. Update if the corporate guardrails change in
-// guidelines/bufab_ui_guidelines.json upstream.
-const V2_1_STRICT_CONSTRAINTS = [
-  "no gradients anywhere",
-  "no bright or saturated colors outside accent (#E8610A)",
-  "no startup-style UI patterns",
-  "no hero without a background image",
-  "no card layouts outside industries-grid section",
-  "no centered hero text",
-  "no multiple CTAs in hero",
-  "section padding max 64px",
-  "no decorative-only sections",
-  "no border radius greater than 2px",
-  "no box shadows with blur greater than 8px",
-  "no web fonts",
-  "no icons in value-columns section",
-  "no thumbnail images in insights-list",
-  "no logo in footer",
+// strict_constraints + final_check for v2.0.1 Glassmorphism on Dark Teal.
+// Every line below is consistent with the tokens above — no legacy hex
+// codes, no contradictions with the canonical design.
+const STRICT_CONSTRAINTS = [
+  "Page background is always the dark teal gradient — linear-gradient(135deg, #1f3c46 0%, #0f2028 50%, #1a3a44 100%). Never a flat color or a different gradient.",
+  "Every surface (card, panel, sidebar, modal, input) is frosted glass — rgba(255,255,255,0.06) with backdrop-filter blur(12px).",
+  "Primary action color is cyan glass — button.primary uses rgba(78,205,196,0.20) background and #4ecdc4 border. Never a different accent color.",
+  "Cyan #4ecdc4 is the only saturated accent used for primary actions, focus rings, active states, and CTA glows.",
+  "Sky blue #a8d8e8 is the only secondary accent — used for app names in topbar, secondary labels, and upload-zone idle borders.",
+  "Headings use Roboto Condensed; body uses Roboto; code/identifiers use Roboto Mono. No other webfonts.",
+  "All headings are UPPERCASE with letter-spacing 0.08em.",
+  "Border radius comes from the named scale only: 4 / 8 / 12 / 16 / 24 / 9999 (full). No arbitrary values.",
+  "Topbar background is rgba(255,255,255,0.04) with blur(20px). Never solid, never a different color.",
+  "BUFAB brand name is always #FFFFFF weight 700; app name in the topbar is always #a8d8e8 weight 400.",
+  "Buttons use the heading font, UPPERCASE, with letter-spacing 0.08em.",
+  "Form inputs have a glass surface and a cyan #4ecdc4 bottom-border on focus, never a different focus color.",
+  "Badges are floating glass pills with semantic backgrounds: success #4caf82, warning #f0a040, error #e05c5c, info/brand #4ecdc4.",
+  "Tables are glass containers — alternating rows get a sky-blue tint, selected rows get cyan tint plus a 3px cyan left border.",
+  "Tone is professional, clear, direct. Sentence case for descriptions, ALL CAPS only for badges and button labels. No marketing fluff.",
 ];
-const V2_1_FINAL_CHECK = [
-  "Does it look like a corporate industrial company, not a tech startup?",
-  "Is the header always #1f3c46 regardless of scroll position?",
-  "Are all H2 and block title colors #325c6d?",
-  "Is the footer background #325c6d with no logo?",
-  "Is the header item order correct: logo → Insights → Solutions → Products → Industries → Customers → Sustainability → [spacer] → Contact us → Global - EN?",
-  "Are Products, Industries, Customers, Sustainability rendered as disabled (non-clickable) links?",
-  "Is every section serving a named business purpose?",
-  "Is the hero left-aligned with a single orange CTA and a background image?",
-  "Are cards absent from all non-grid sections?",
-  "Is section padding 64px or less?",
+const FINAL_CHECK = [
+  "Is the page background the dark teal gradient (never a flat color)?",
+  "Are all surfaces frosted glass with blur(12px) or blur(20px) for overlays?",
+  "Is the primary CTA cyan glass (rgba(78,205,196,0.20) with #4ecdc4 border) and never another color?",
+  "Do headings use Roboto Condensed uppercase with letter-spacing 0.08em?",
+  "Are every color and shadow value referenced from the design-tokens file rather than hardcoded?",
+  "Are border radii from the named scale (4/8/12/16/24/full)?",
+  "Is the topbar transparent glass with blur(20px), BUFAB in white, app name in sky blue?",
+  "Are badges floating glass pills with semantic tinted backgrounds?",
+  "Is the writing style direct, professional, no startup or marketing tone?",
+  "Are inputs glass with a cyan bottom-border focus state?",
 ];
 
 // Build the slug → body plan.
@@ -155,13 +147,13 @@ if (data.writingStyle) {
 plan.push({
   slug: "ui-rules-strict-constraints",
   title: "Strict UI constraints (v2.1 corporate guardrails)",
-  body: V2_1_STRICT_CONSTRAINTS,
+  body: STRICT_CONSTRAINTS,
   domain: "ui-rules",
 });
 plan.push({
   slug: "ui-rules-final-check",
   title: "UI final-check questions (v2.1)",
-  body: V2_1_FINAL_CHECK,
+  body: FINAL_CHECK,
   domain: "ui-rules",
 });
 
