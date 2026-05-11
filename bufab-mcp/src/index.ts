@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -245,10 +245,28 @@ type SetupEnvFile = {
   executable: boolean;
 };
 
+type SetupEnvPayload = {
+  source_dir: string;
+  files: SetupEnvFile[];
+};
+
+type SetupEnvApplyResult = {
+  target_dir: string;
+  source_dir: string;
+  discovery_used: boolean;
+  searched_source_dirs: string[];
+  files_written: Array<{
+    path: string;
+    executable: boolean;
+  }>;
+};
+
 const SETUP_ENV_ROOTS = [".claude", ".clinerules", ".cursor", ".gitattributes", "AGENTS.md"];
 const SETUP_ENV_RESOURCE_TEMPLATE = "bufab-agent-config://{source}/{+path}";
 const MAX_SETUP_ENV_FILES = 200;
 const setupEnvSourceDirs = new Map<string, string>();
+const setupEnvExportCache = new Map<string, Promise<SetupEnvPayload>>();
+let bundledSetupEnvPromise: Promise<SetupEnvPayload> | null = null;
 
 function setupEnvResourceUri(sourceDirAbs: string, relPath: string): string {
   const source = setupEnvSourceId(sourceDirAbs);
@@ -267,6 +285,59 @@ function setupEnvSourceId(sourceDirAbs: string): string {
   // Include a stable suffix derived from the absolute path to avoid basename collisions.
   const digest = createHash("sha256").update(resolve(sourceDirAbs)).digest("hex").slice(0, 12);
   return `${id}-${digest}`;
+}
+
+function setupEnvCacheEnabled(): boolean {
+  return process.env.BUFAB_SETUP_ENV_CACHE !== "0";
+}
+
+function getCachedSetupEnvironment(sourceDirAbs: string): Promise<SetupEnvPayload> {
+  const key = resolve(sourceDirAbs);
+  if (!setupEnvCacheEnabled()) {
+    return exportSetupEnvironment(key);
+  }
+
+  let cached = setupEnvExportCache.get(key);
+  if (!cached) {
+    cached = exportSetupEnvironment(key).catch((error) => {
+      setupEnvExportCache.delete(key);
+      throw error;
+    });
+    setupEnvExportCache.set(key, cached);
+  }
+  return cached;
+}
+
+function getBundledSetupEnvironment(): Promise<SetupEnvPayload> {
+  const bundledConfigDir = defaultSetupEnvironmentSourceDir();
+  if (!setupEnvCacheEnabled()) {
+    return exportSetupEnvironment(bundledConfigDir);
+  }
+
+  bundledSetupEnvPromise ??= exportSetupEnvironment(bundledConfigDir).catch((error) => {
+    bundledSetupEnvPromise = null;
+    throw error;
+  });
+  return bundledSetupEnvPromise;
+}
+
+async function loadSetupEnvironmentForApply(sourceDirAbs?: string): Promise<{
+  source_dir: string;
+  discovery_used: boolean;
+  searched_source_dirs: string[];
+  files: SetupEnvFile[];
+}> {
+  if (sourceDirAbs === undefined) {
+    const bundledPayload = await getBundledSetupEnvironment();
+    return {
+      source_dir: bundledPayload.source_dir,
+      discovery_used: false,
+      searched_source_dirs: [],
+      files: bundledPayload.files,
+    };
+  }
+
+  return await exportSetupEnvironmentWithDiscovery(sourceDirAbs);
 }
 
 function encodeResourcePath(relPath: string): string {
@@ -323,10 +394,7 @@ async function listFilesRecursive(rootAbs: string, relBase = "", limit = MAX_SET
   return out;
 }
 
-async function exportSetupEnvironment(sourceDirAbs: string): Promise<{
-  source_dir: string;
-  files: SetupEnvFile[];
-}> {
+async function exportSetupEnvironment(sourceDirAbs: string): Promise<SetupEnvPayload> {
   const files: SetupEnvFile[] = [];
 
   for (const root of SETUP_ENV_ROOTS) {
@@ -409,13 +477,13 @@ async function exportSetupEnvironmentWithDiscovery(requestedSourceDirAbs: string
 }> {
   const searched: string[] = [];
   /** Bundled defaults (always includes repo-root AGENTS.md when packaged). */
-  const bundledPayload = await exportSetupEnvironment(defaultSetupEnvironmentSourceDir());
-  let overlayPayload: { source_dir: string; files: SetupEnvFile[] } | null = null;
+  const bundledPayload = await getBundledSetupEnvironment();
+  let overlayPayload: SetupEnvPayload | null = null;
   let overlayCandidateDir: string | null = null;
 
   for (const candidate of candidateSetupEnvironmentDirs(requestedSourceDirAbs)) {
     searched.push(candidate);
-    const payload = await exportSetupEnvironment(candidate);
+    const payload = await getCachedSetupEnvironment(candidate);
     if (payload.files.length > 0) {
       overlayPayload = payload;
       overlayCandidateDir = candidate;
@@ -437,6 +505,75 @@ async function exportSetupEnvironmentWithDiscovery(requestedSourceDirAbs: string
   };
 }
 
+async function writeSetupEnvironmentFile(targetDirAbs: string, file: SetupEnvFile): Promise<{
+  path: string;
+  executable: boolean;
+}> {
+  const relPath = sanitizeRelativePath(file.path);
+  const absPath = resolve(targetDirAbs, relPath);
+  const targetWithSep = targetDirAbs.endsWith("/") ? targetDirAbs : `${targetDirAbs}/`;
+  if (absPath !== targetDirAbs && !absPath.startsWith(targetWithSep)) {
+    throw new Error(`path escapes target_dir: ${relPath}`);
+  }
+
+  await mkdir(dirname(absPath), { recursive: true });
+  await writeFile(absPath, Buffer.from(file.content_base64, "base64"));
+  if (process.platform !== "win32") {
+    await chmod(absPath, file.executable ? 0o755 : 0o644);
+  }
+
+  return {
+    path: relPath,
+    executable: file.executable,
+  };
+}
+
+function findSetupEnvironmentPathConflicts(files: SetupEnvFile[]): Array<[string, string]> {
+  const paths = [...new Set(files.map((file) => sanitizeRelativePath(file.path)))].sort();
+  const conflicts: Array<[string, string]> = [];
+  for (let i = 0; i < paths.length; i += 1) {
+    const parent = paths[i];
+    for (let j = i + 1; j < paths.length; j += 1) {
+      const child = paths[j];
+      if (!child.startsWith(`${parent}/`)) break;
+      conflicts.push([parent, child]);
+    }
+  }
+  return conflicts;
+}
+
+async function applySetupEnvironmentToTarget(args: {
+  source_dir?: string;
+  target_dir: string;
+}): Promise<SetupEnvApplyResult> {
+  const targetDirAbs = resolve(process.cwd(), args.target_dir);
+  const sourcePayload = await loadSetupEnvironmentForApply(
+    args.source_dir !== undefined ? resolve(process.cwd(), args.source_dir) : undefined,
+  );
+
+  const conflicts = findSetupEnvironmentPathConflicts(sourcePayload.files);
+  if (conflicts.length > 0) {
+    const rendered = conflicts.map(([parent, child]) => `${parent} -> ${child}`).join(", ");
+    throw new Error(
+      `setup_environment_apply cannot write incompatible file paths into one target directory: ${rendered}`,
+    );
+  }
+
+  await mkdir(targetDirAbs, { recursive: true });
+  const filesWritten: SetupEnvApplyResult["files_written"] = [];
+  for (const file of sourcePayload.files) {
+    filesWritten.push(await writeSetupEnvironmentFile(targetDirAbs, file));
+  }
+
+  return {
+    target_dir: targetDirAbs,
+    source_dir: sourcePayload.source_dir,
+    discovery_used: sourcePayload.discovery_used,
+    searched_source_dirs: sourcePayload.searched_source_dirs,
+    files_written: filesWritten,
+  };
+}
+
 async function resolveSetupEnvironmentSourceDir(source: string): Promise<string> {
   const cached = setupEnvSourceDirs.get(source);
   if (cached) {
@@ -446,7 +583,7 @@ async function resolveSetupEnvironmentSourceDir(source: string): Promise<string>
   for (const candidate of candidateSetupEnvironmentDirs(defaultSetupEnvironmentSourceDir())) {
     const sourceId = setupEnvSourceId(candidate);
     if (sourceId !== source) continue;
-    const payload = await exportSetupEnvironment(candidate);
+    const payload = await getCachedSetupEnvironment(candidate);
     if (payload.files.length > 0) {
       setupEnvSourceDirs.set(source, candidate);
       return candidate;
@@ -497,7 +634,7 @@ const server = new McpServer(
   },
   {
     instructions:
-      "Tools: (1) waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) rules_* — infrastructure rules in LanceDB (.lancedb). (3) ui_* (including ui_section_spec, ui_token, ui_export, ui_export_markdown) — UI guidelines fragments in LanceDB (.lancedb-ui). (4) arch_* — architecture requirements profiles in LanceDB (.lancedb-arch), plus requirements and file-change validation via arch_validate_requirements and arch_validate_files. Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_FORCE_RESEED=1, BUFAB_ARCH_DB_PATH. First embedding use downloads MiniLM via @huggingface/transformers.",
+      "Tools: (1) waf_guidelines — Azure WAF via official @azure/mcp plus static Bufab overlay. (2) rules_* — infrastructure rules in LanceDB (.lancedb). (3) ui_* (including ui_section_spec, ui_token, ui_export, ui_export_markdown) — UI guidelines fragments in LanceDB (.lancedb-ui). (4) arch_* — architecture requirements profiles in LanceDB (.lancedb-arch), plus requirements and file-change validation via arch_validate_requirements and arch_validate_files. (5) setup_environment / setup_environment_apply — export or write .claude, .clinerules, .cursor (hooks.json and rules/* only), .gitattributes, and AGENTS.md. Env: BUFAB_RULES_DB_PATH, BUFAB_UI_DB_PATH, BUFAB_UI_FORCE_RESEED=1, BUFAB_ARCH_DB_PATH. First embedding use downloads MiniLM via @huggingface/transformers.",
   },
 );
 
@@ -555,6 +692,36 @@ server.registerTool(
       const src = resolve(process.cwd(), source_dir ?? ".");
       const payload = await exportSetupEnvironmentWithDiscovery(src);
       return { content: [{ type: "text", text: jsonText(payload) }] };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return {
+        isError: true,
+        content: [{ type: "text", text: message }],
+      };
+    }
+  },
+);
+
+server.registerTool(
+  "setup_environment_apply",
+  {
+    title: "Setup environment (apply project config)",
+    description:
+      "Writes the exported .claude/.clinerules/.cursor (hooks + rules only)/.gitattributes/AGENTS.md files directly into a target repo. If source_dir is omitted, applies the bundled bufab-mcp/agent-config template. If source_dir is set, discovery runs from that path first and merges with bundled defaults. Does not export .cursor/mcp.json.",
+    inputSchema: {
+      target_dir: z
+        .string()
+        .describe("Target repository root to write into. May be absolute or relative to the MCP server cwd."),
+      source_dir: z
+        .string()
+        .optional()
+        .describe("Optional directory to export from before applying. Defaults to the bundled template."),
+    },
+  },
+  async ({ source_dir, target_dir }) => {
+    try {
+      const result = await applySetupEnvironmentToTarget({ source_dir, target_dir });
+      return { content: [{ type: "text", text: jsonText(result) }] };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       return {

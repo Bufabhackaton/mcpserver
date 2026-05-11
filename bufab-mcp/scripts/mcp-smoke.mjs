@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Minimal MCP stdio smoke test: initialize → initialized → tools/list → resources/templates/list.
+ * Minimal MCP stdio smoke test: initialize → initialized → tools/list → resources/templates/list → setup_environment_apply.
  */
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -86,6 +86,9 @@ try {
   }
   const names = (tools.result?.tools ?? []).map((t) => t.name);
   console.log("tools/list OK:", names.join(", "));
+  if (!names.includes("setup_environment_apply")) {
+    throw new Error(`missing setup_environment_apply; got ${names.join(", ")}`);
+  }
   if (!names.includes("arch_validate_requirements")) {
     throw new Error(`missing arch_validate_requirements; got ${names.join(", ")}`);
   }
@@ -158,6 +161,53 @@ try {
       throw new Error(`resources/read returned unexpected content: ${JSON.stringify(content)}`);
     }
     console.log("resources/read OK:", uri);
+
+    const applySource = join(tmp, "apply-source");
+    await mkdir(join(applySource, ".claude"), { recursive: true });
+    await writeFile(join(applySource, ".claude", "settings.json"), '{ "source": "smoke" }\n', "utf8");
+    await mkdir(join(applySource, ".clinerules", "hooks"), { recursive: true });
+    await writeFile(join(applySource, ".clinerules", "hooks", "custom.txt"), "apply-hook\n", "utf8");
+
+    const appliedDir = join(tmp, "applied");
+    const applySetup = await request("tools/call", {
+      name: "setup_environment_apply",
+      arguments: { source_dir: applySource, target_dir: appliedDir },
+    });
+    if (applySetup.error) {
+      throw new Error(JSON.stringify(applySetup.error));
+    }
+    const applyText = applySetup.result?.content?.find((part) => part.type === "text")?.text;
+    const applyPayload = JSON.parse(applyText);
+    if (applyPayload.target_dir !== appliedDir) {
+      throw new Error(`setup_environment_apply returned unexpected target_dir: ${applyText}`);
+    }
+    if (applyPayload.source_dir !== applySource) {
+      throw new Error(`setup_environment_apply returned unexpected source_dir: ${applyText}`);
+    }
+    if (!applyPayload.files_written?.some((file) => file.path === ".claude/settings.json")) {
+      throw new Error(`setup_environment_apply did not write .claude/settings.json: ${applyText}`);
+    }
+    if (!applyPayload.files_written?.some((file) => file.path === ".clinerules/hooks/custom.txt")) {
+      throw new Error(`setup_environment_apply did not write custom hook file: ${applyText}`);
+    }
+
+    const appliedSettings = await readFile(join(appliedDir, ".claude", "settings.json"), "utf8");
+    if (!appliedSettings.includes('"source": "smoke"')) {
+      throw new Error(`applied .claude/settings.json unexpected: ${JSON.stringify(appliedSettings)}`);
+    }
+    const appliedCustom = await readFile(join(appliedDir, ".clinerules", "hooks", "custom.txt"), "utf8");
+    if (appliedCustom !== "apply-hook\n") {
+      throw new Error(`applied custom hook file unexpected: ${JSON.stringify(appliedCustom)}`);
+    }
+    const appliedAgents = await readFile(join(appliedDir, "AGENTS.md"), "utf8");
+    if (!appliedAgents.includes("Agents")) {
+      throw new Error(`applied AGENTS.md unexpected: ${JSON.stringify(appliedAgents)}`);
+    }
+    const appliedHookMode = await stat(join(appliedDir, ".clinerules", "hooks", "PostToolUse"));
+    if (process.platform !== "win32" && (appliedHookMode.mode & 0o111) === 0) {
+      throw new Error("applied PostToolUse hook is not executable");
+    }
+    console.log("setup_environment_apply OK:", applyPayload.target_dir);
 
     const childDir = join(tmp, "child", "project");
     await mkdir(childDir, { recursive: true });

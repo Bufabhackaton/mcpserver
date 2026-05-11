@@ -108,10 +108,19 @@ UI, infrastructure rules, and architecture profiles live under **`BUFAB_UI_DB_PA
 
 ### 4. Export and apply the agent hook config (no `mcp.json`)
 
-Use the MCP agent config resources to create the hook config in the new repo. There are two supported discovery paths:
+Use the MCP agent config resources to create the hook config in the new repo. There are three supported paths:
 
 1. Call `resources/list`. This advertises the bundled `bufab-mcp/agent-config` files as `bufab-agent-config://...` resources. If `BUFAB_AGENT_CONFIG_SOURCE_DIR` is set, that directory is used instead.
-2. Call the `setup_environment` tool when you need to pass an explicit source directory:
+2. Call `setup_environment_apply` when you want the server to write the files directly into the target repo:
+
+```json
+{
+  "target_dir": "/absolute/path/to/new-repo",
+  "source_dir": "/absolute/path/to/bufab-mcp/agent-config"
+}
+```
+
+3. Call `setup_environment` when you need a JSON export or want to pass an explicit source directory without writing files yet:
 
 ```json
 {
@@ -119,7 +128,7 @@ Use the MCP agent config resources to create the hook config in the new repo. Th
 }
 ```
 
-Both paths discover `.claude`, `.clinerules`, `.cursor` (**`hooks.json` and `rules/*` only**), `.gitattributes`, and repo-root **`AGENTS.md`** (if present). **`.cursor/mcp.json` is not exported** — MCP is configured globally. For each resource, call `resources/read` and write the returned content to the same relative path in the new repo.
+The export paths discover `.claude`, `.clinerules`, `.cursor` (**`hooks.json` and `rules/*` only**), `.gitattributes`, and repo-root **`AGENTS.md`** (if present). **`.cursor/mcp.json` is not exported** — MCP is configured globally. For each resource, call `resources/read` and write the returned content to the same relative path in the new repo.
 
 `setup_environment` also returns a JSON payload with:
 
@@ -128,7 +137,7 @@ Both paths discover `.claude`, `.clinerules`, `.cursor` (**`hooks.json` and `rul
 - `files[].executable` — whether to preserve the executable bit.
 - `files[].resource_uri` — a server-owned resource URI, for example `bufab-agent-config://...`.
 
-If your client cannot read MCP resources, decode `files[].content_base64` from the `setup_environment` response instead. In both cases, preserve the relative paths and executable bits.
+If your client cannot read MCP resources, decode `files[].content_base64` from the `setup_environment` response instead. In both cases, preserve the relative paths and executable bits. `setup_environment_apply` performs that write step for you and preserves executable bits on Unix-like systems.
 
 The expected exported files include:
 
@@ -141,7 +150,7 @@ AGENTS.md
 .gitattributes
 ```
 
-The resources and `setup_environment` are intentionally export-only; they do not modify the target repo.
+The resources and `setup_environment` are intentionally export-only; they do not modify the target repo. Use `setup_environment_apply` when you want the server to write the files directly.
 
 Add these runtime artifacts to the new repo's `.gitignore`:
 
@@ -267,6 +276,7 @@ There is **no** `arch_force_reseed` env flag; delete or `arch_delete` profiles i
 | `ui_token` | Design token or dotted path (`name`). |
 | `ui_export` | Merged export of the current UI guideline object. |
 | `ui_export_markdown` | Human-readable markdown export of current UI fragments. |
+| `setup_environment_apply` | Write the exported `.claude`, `.clinerules`, `.cursor` (`hooks.json` and `rules/*` only), `.gitattributes`, and repo-root **`AGENTS.md`** files directly into a target repo. **Does not write `.cursor/mcp.json`.** When `source_dir` is omitted, applies the bundled `bufab-mcp/agent-config` template. |
 | `setup_environment` | Export `.claude`, `.clinerules`, `.cursor` (`hooks.json` and `rules/*` only), `.gitattributes`, and repo-root **`AGENTS.md`** from a source directory. **Does not export `.cursor/mcp.json`.** The bundled `bufab-mcp/agent-config` template is merged with whichever directory yields config (requested path → parents → template → cwd …): missing defaults such as **`AGENTS.md`** are filled from the bundle; existing files in the overlay win per path. Each file includes a server-owned `resource_uri` readable through MCP `resources/read`. |
 
 ## Resources
@@ -315,6 +325,8 @@ npm run verify:ui
 ## Troubleshooting
 
 - **Slow first request**: embedding model download or LanceDB initialization.
+- **Slow `setup_environment` calls**: exports are cached for the server process. Set `BUFAB_SETUP_ENV_CACHE=0` if you are actively editing `agent-config` and want fresh reads without restarting the server.
+- **`setup_environment_apply` rejects paths**: the source tree cannot contain file/directory collisions such as `.claude` plus `.claude/settings.json`. Use a directory-based source tree or apply the bundled template.
 - **`waf_guidelines` errors**: confirm `npx -y @azure/mcp@latest server start --transport stdio …` works locally and Azure auth is valid.
 - **Missing UI data**: populate UI fragments using `ui_upsert`; if needed, set `BUFAB_UI_FORCE_RESEED=1` once to clear stale rows before repopulating.
 - **`arch_list` returns `[]`**: the architecture LanceDB has no profiles yet. There is no auto-seed; call `arch_upsert` with `requirements_json` to create one. Also confirm `BUFAB_ARCH_DB_PATH` points at the directory you expect (same workspace as `bufab-mcp`); a different repo or missing `bufab-mcp` yields an empty or separate empty DB.
