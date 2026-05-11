@@ -615,9 +615,12 @@ export class UiGuidelinesStore {
     // Reconstruct tokens object
     const tokens: Record<string, any> = {};
     const tokenSlugs = [
-      "tokens-colors", "tokens-effects", "tokens-typography", 
-      "tokens-spacing", "tokens-borders", "tokens-shadows", 
-      "tokens-transitions", "tokens-zindex"
+      "tokens-colors", "tokens-effects", "tokens-typography",
+      "tokens-spacing", "tokens-borders", "tokens-shadows",
+      "tokens-transitions", "tokens-zindex",
+      // v2.1 additions — Object.assign-merged into the tokens output so callers
+      // can read e.g. `tokens.buttons.primary_cta` from `ui_export`.
+      "tokens-buttons", "tokens-tone",
     ];
     
     for (const slug of tokenSlugs) {
@@ -653,6 +656,21 @@ export class UiGuidelinesStore {
       },
       componentRules: components
     };
+
+    // Surface ui_rules.* fragments so consumers (e.g. the UserPromptSubmit
+    // hook) that follow the canonical guideline shape can find their data.
+    const uiRules: Record<string, unknown> = {};
+    const strictConstraints = parse("ui-rules-strict-constraints");
+    if (Array.isArray(strictConstraints)) {
+      uiRules.strict_constraints = strictConstraints;
+    }
+    const finalCheck = parse("ui-rules-final-check");
+    if (Array.isArray(finalCheck)) {
+      uiRules.final_check = finalCheck;
+    }
+    if (Object.keys(uiRules).length) {
+      out.ui_rules = uiRules;
+    }
 
     return out;
   }

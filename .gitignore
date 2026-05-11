@@ -17,6 +17,7 @@ out/
 bin/
 !**/src/main/**/bin/
 !**/src/test/**/bin/
+!bufab-mcp/bin/
 
 ### NetBeans ###
 /nbproject/private/

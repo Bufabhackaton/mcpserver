@@ -1,0 +1,1182 @@
+{
+  "meta": {
+    "name": "Bufab Design System",
+    "version": "2.0.1",
+    "theme": "Glassmorphism on Dark Teal",
+    "description": "Full glassmorphism theme on a rich dark teal background. All surfaces are frosted glass. Cyan accents electric on dark. Every component is affected.",
+    "usage": "Store each top-level section as a separate LanceDB document chunk for MCP retrieval. Tag each chunk with its 'category' field for semantic search."
+  },
+
+  "tokens": {
+    "category": "design-tokens",
+    "description": "Core design primitives for the glassmorphism theme. The page background is always the dark teal gradient. All surfaces sit on top of it as frosted glass layers.",
+
+    "colors": {
+      "background": {
+        "page":        { "value": "linear-gradient(135deg, #1f3c46 0%, #0f2028 50%, #1a3a44 100%)", "usage": "Full-page background gradient — always applied to body/root. Never a flat color." },
+        "pageFixed":   { "value": "#162c34", "usage": "Fallback flat color for environments that do not support gradients" }
+      },
+      "glass": {
+        "surface":      { "value": "rgba(255,255,255,0.06)", "usage": "Default frosted glass fill — cards, panels, sidebar, modal" },
+        "surfaceRaised":{ "value": "rgba(255,255,255,0.10)", "usage": "Elevated glass — dropdowns, tooltips, popovers" },
+        "surfaceHover": { "value": "rgba(255,255,255,0.12)", "usage": "Glass surface on hover — interactive cards, nav items" },
+        "surfaceActive":{ "value": "rgba(255,255,255,0.16)", "usage": "Glass surface on active/selected — selected rows, active tabs" },
+        "border":       { "value": "rgba(255,255,255,0.12)", "usage": "Default glass border — all frosted surfaces" },
+        "borderBright": { "value": "rgba(255,255,255,0.22)", "usage": "Glass border on hover or focus" },
+        "blur":         { "value": "blur(12px)",             "usage": "backdrop-filter value for all glass surfaces" },
+        "blurHeavy":    { "value": "blur(20px)",             "usage": "backdrop-filter for modals and overlays" }
+      },
+      "brand": {
+        "primary":      { "value": "#1f3c46", "usage": "Page background base, deep surfaces" },
+        "primaryDark":  { "value": "#0f2028", "usage": "Darkest background layer" },
+        "primaryMid":   { "value": "#325c6d", "usage": "Mid-tone for dividers, secondary glass borders" },
+        "primaryLight": { "value": "#4a7d92", "usage": "Light brand tint for subtle highlights on dark" }
+      },
+      "accent": {
+        "cyan":          { "value": "#4ecdc4", "usage": "Primary accent — focus rings, active states, CTA glows, progress fills, icon highlights" },
+        "cyanBright":    { "value": "#7eddd6", "usage": "Lighter cyan for text on dark backgrounds, secondary highlights" },
+        "cyanSubtle":    { "value": "rgba(78,205,196,0.15)", "usage": "Soft cyan tint — hover fills, selected rows, drag-over zones" },
+        "cyanGlow":      { "value": "0 0 16px rgba(78,205,196,0.35)", "usage": "Glow box-shadow for primary buttons and active inputs" },
+        "skyBlue":       { "value": "#a8d8e8", "usage": "Soft blue — secondary text on dark, upload zone accents, app name in topbar" },
+        "skyBlueSubtle": { "value": "rgba(168,216,232,0.12)", "usage": "Very subtle blue wash — alternating table rows, section tints" }
+      },
+      "text": {
+        "primary":     { "value": "#FFFFFF",              "usage": "Main text on dark/glass surfaces" },
+        "secondary":   { "value": "rgba(255,255,255,0.70)", "usage": "Secondary labels, descriptions, nav links" },
+        "muted":       { "value": "rgba(255,255,255,0.40)", "usage": "Placeholder text, disabled states, table header labels" },
+        "accent":      { "value": "#4ecdc4",              "usage": "Cyan accent text — part numbers, active labels, links" },
+        "accentSoft":  { "value": "#a8d8e8",              "usage": "Sky blue text — app name, secondary accented labels" }
+      },
+      "semantic": {
+        "success": { "value": "#4caf82", "bg": "rgba(76,175,130,0.15)", "border": "rgba(76,175,130,0.40)",  "usage": "Positive status — glassy green on dark" },
+        "warning": { "value": "#f0a040", "bg": "rgba(240,160,64,0.15)",  "border": "rgba(240,160,64,0.40)",  "usage": "Caution — glassy amber on dark" },
+        "error":   { "value": "#e05c5c", "bg": "rgba(224,92,92,0.15)",   "border": "rgba(224,92,92,0.40)",   "usage": "Errors — glassy red on dark" },
+        "info":    { "value": "#4ecdc4", "bg": "rgba(78,205,196,0.12)",  "border": "rgba(78,205,196,0.35)",  "usage": "Info — reuse cyan, consistent with accent system" }
+      }
+    },
+
+    "effects": {
+      "description": "Named effect tokens. Every component references these rather than hardcoding values.",
+      "glassShadow":       "0 8px 32px rgba(0,0,0,0.32), 0 2px 8px rgba(0,0,0,0.24)",
+      "glassShadowHover":  "0 16px 48px rgba(0,0,0,0.40), 0 4px 16px rgba(0,0,0,0.28)",
+      "glassShadowModal":  "0 24px 64px rgba(0,0,0,0.48)",
+      "cyanFocusRing":     "0 0 0 2px rgba(78,205,196,0.60)",
+      "cyanGlow":          "0 0 16px rgba(78,205,196,0.35)",
+      "cyanGlowStrong":    "0 0 24px rgba(78,205,196,0.50), 0 0 48px rgba(78,205,196,0.20)",
+      "badgeFloat":        "0 2px 8px rgba(0,0,0,0.28), 0 0 0 1px rgba(255,255,255,0.10)",
+      "uploadZoneIdle":    "inset 0 0 0 2px rgba(168,216,232,0.30)",
+      "uploadZoneHover":   "inset 0 0 0 2px rgba(78,205,196,0.50), 0 0 16px rgba(78,205,196,0.15)",
+      "uploadZoneActive":  "inset 0 0 0 2px #4ecdc4, 0 0 24px rgba(78,205,196,0.30)",
+      "skeletonGradient":  "linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.04) 75%)",
+      "innerTopHighlight": "inset 0 1px 0 rgba(255,255,255,0.18)",
+      "usage": {
+        "glassShadow":       "Default shadow on all glass cards and panels",
+        "glassShadowHover":  "Card/panel shadow on hover",
+        "glassShadowModal":  "Shadow for modals and dialogs",
+        "cyanFocusRing":     "Focus indicator on all interactive elements",
+        "cyanGlow":          "Glow on primary button hover",
+        "cyanGlowStrong":    "Glow on primary button active or CTA emphasis",
+        "badgeFloat":        "Shadow giving badges a floating look on glass",
+        "uploadZoneIdle":    "Dashed border effect on idle upload zone",
+        "uploadZoneHover":   "Upload zone border on hover",
+        "uploadZoneActive":  "Upload zone border and glow on drag-over",
+        "skeletonGradient":  "Shimmer animation gradient for skeleton loaders",
+        "innerTopHighlight": "Subtle top inner highlight for glass depth illusion"
+      }
+    },
+
+    "typography": {
+      "fontFamilies": {
+        "heading": "'Roboto Condensed', 'Arial Narrow', Arial, sans-serif",
+        "body":    "'Roboto', Arial, sans-serif",
+        "mono":    "'Roboto Mono', 'Courier New', monospace"
+      },
+      "fontSizes": {
+        "xs":   { "value": "0.64rem",  "px": 10 },
+        "sm":   { "value": "0.8rem",   "px": 13 },
+        "base": { "value": "1rem",     "px": 16 },
+        "md":   { "value": "1.25rem",  "px": 20 },
+        "lg":   { "value": "1.563rem", "px": 25 },
+        "xl":   { "value": "1.953rem", "px": 31 },
+        "2xl":  { "value": "2.441rem", "px": 39 },
+        "3xl":  { "value": "3.052rem", "px": 49 }
+      },
+      "fontWeights": { "regular": 400, "medium": 500, "bold": 700 },
+      "lineHeights":  { "tight": 1.2, "normal": 1.5, "loose": 1.75 },
+      "letterSpacing": {
+        "tight":      "-0.02em",
+        "normal":     "0em",
+        "wide":       "0.08em",
+        "usage-wide": "Use 'wide' on uppercase labels and table headers"
+      }
+    },
+
+    "spacing": {
+      "description": "Base unit is 4px.",
+      "scale": {
+        "1":  { "value": "0.25rem", "px": 4 },
+        "2":  { "value": "0.5rem",  "px": 8 },
+        "3":  { "value": "0.75rem", "px": 12 },
+        "4":  { "value": "1rem",    "px": 16 },
+        "5":  { "value": "1.25rem", "px": 20 },
+        "6":  { "value": "1.5rem",  "px": 24 },
+        "8":  { "value": "2rem",    "px": 32 },
+        "10": { "value": "2.5rem",  "px": 40 },
+        "12": { "value": "3rem",    "px": 48 },
+        "16": { "value": "4rem",    "px": 64 },
+        "20": { "value": "5rem",    "px": 80 }
+      }
+    },
+
+    "borderRadius": {
+      "none": "0",
+      "sm":   "4px",
+      "md":   "8px",
+      "lg":   "12px",
+      "xl":   "16px",
+      "2xl":  "24px",
+      "full": "9999px",
+      "usage": {
+        "sm":   "Chips, small badges",
+        "md":   "Inputs, buttons, table rows",
+        "lg":   "Cards, panels, dropdowns",
+        "xl":   "Modals, upload zones, sidebar",
+        "full": "Pills, round badges, toggle thumbs"
+      }
+    },
+
+    "shadows": {
+      "glass":      "0 8px 32px rgba(0,0,0,0.32), 0 2px 8px rgba(0,0,0,0.24)",
+      "glassHover": "0 16px 48px rgba(0,0,0,0.40), 0 4px 16px rgba(0,0,0,0.28)",
+      "glassModal": "0 24px 64px rgba(0,0,0,0.48)",
+      "focus":      "0 0 0 2px rgba(78,205,196,0.60)",
+      "cyanGlow":   "0 0 16px rgba(78,205,196,0.35)",
+      "badge":      "0 2px 8px rgba(0,0,0,0.28), 0 0 0 1px rgba(255,255,255,0.10)"
+    },
+
+    "transitions": {
+      "fast":   "100ms ease",
+      "normal": "200ms ease",
+      "slow":   "350ms ease"
+    },
+
+    "zIndex": {
+      "base":    0,
+      "raised":  10,
+      "sidebar": 150,
+      "topbar":  200,
+      "dropdown":100,
+      "sticky":  200,
+      "modal":   300,
+      "toast":   400,
+      "tooltip": 500
+    }
+  },
+
+  "layout": {
+    "category": "layout",
+    "description": "Grid system and structural dimensions. Note: The topbar is fixed/sticky; the app-shell must offset the main content by 'topbarHeight' to maintain visibility.",
+    "maxWidthContent": "1280px",
+    "maxWidthProse":   "680px",
+    "sidebarWidth":    "260px",
+    "topbarHeight":    "60px",
+    "contentOffsetTop": "60px",
+    "gridColumns":     12,
+    "gridGutter":      "16px",
+    "breakpoints": {
+      "sm":  "640px",
+      "md":  "768px",
+      "lg":  "1024px",
+      "xl":  "1280px",
+      "2xl": "1536px"
+    },
+    "rules": [
+      "Main content area uses a 12-column responsive grid.",
+      "Grid gutter is fixed at 16px across all breakpoints.",
+      "Maximum content width is capped at 1280px for readability on ultra-wide displays.",
+      "Sidebar is persistent on desktop (>=1024px) and hidden on mobile/tablet (<1024px).",
+      "All layout dimensions (offsets, heights) must reference the layout tokens to ensure consistency."
+    ]
+  },
+
+  "components": {
+    "category": "components",
+    "description": "All 27 components reworked for the glassmorphism theme. Every surface is frosted glass on the dark teal gradient background. Text is white or near-white. Accents are cyan and sky blue.",
+
+    "button": {
+      "description": "Glass-surfaced buttons. Primary has a cyan glow on hover that makes it pop off the dark background. Secondary is a ghost glass outline. All variants have a top inner highlight for the glass depth effect.",
+      "variants": {
+        "primary": {
+          "background":    "rgba(78,205,196,0.20)",
+          "backdropFilter":"blur(12px)",
+          "color":         "#FFFFFF",
+          "border":        "1px solid rgba(78,205,196,0.50)",
+          "borderRadius":  "8px",
+          "padding":       "12px 28px",
+          "fontFamily":    "heading",
+          "fontWeight":    700,
+          "fontSize":      "1rem",
+          "textTransform": "uppercase",
+          "letterSpacing": "0.08em",
+          "boxShadow":     "inset 0 1px 0 rgba(255,255,255,0.18), 0 4px 16px rgba(0,0,0,0.24)",
+          "transition":    "all 200ms ease",
+          "states": {
+            "hover":    { "background": "rgba(78,205,196,0.32)", "borderColor": "#4ecdc4", "boxShadow": "inset 0 1px 0 rgba(255,255,255,0.18), 0 0 24px rgba(78,205,196,0.50), 0 4px 16px rgba(0,0,0,0.24)" },
+            "focus":    { "outline": "none", "boxShadow": "0 0 0 2px rgba(78,205,196,0.60), 0 0 16px rgba(78,205,196,0.35)" },
+            "active":   { "background": "rgba(78,205,196,0.40)", "transform": "translateY(1px)" },
+            "disabled": { "opacity": 0.35, "cursor": "not-allowed" }
+          }
+        },
+        "secondary": {
+          "background":    "rgba(255,255,255,0.06)",
+          "backdropFilter":"blur(12px)",
+          "color":         "rgba(255,255,255,0.90)",
+          "border":        "1px solid rgba(255,255,255,0.20)",
+          "borderRadius":  "8px",
+          "padding":       "12px 28px",
+          "fontFamily":    "heading",
+          "fontWeight":    700,
+          "fontSize":      "1rem",
+          "textTransform": "uppercase",
+          "letterSpacing": "0.08em",
+          "boxShadow":     "inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.20)",
+          "transition":    "all 200ms ease",
+          "states": {
+            "hover":    { "background": "rgba(255,255,255,0.12)", "borderColor": "rgba(255,255,255,0.35)", "color": "#FFFFFF" },
+            "focus":    { "outline": "none", "boxShadow": "0 0 0 2px rgba(78,205,196,0.60)" },
+            "disabled": { "opacity": 0.35, "cursor": "not-allowed" }
+          }
+        },
+        "ghost": {
+          "background":    "transparent",
+          "color":         "rgba(255,255,255,0.60)",
+          "border":        "none",
+          "borderRadius":  "8px",
+          "padding":       "12px 20px",
+          "transition":    "all 150ms ease",
+          "states": {
+            "hover":  { "background": "rgba(255,255,255,0.08)", "color": "#FFFFFF" },
+            "focus":  { "outline": "none", "boxShadow": "0 0 0 2px rgba(78,205,196,0.60)" }
+          }
+        },
+        "danger": {
+          "background":    "rgba(224,92,92,0.20)",
+          "backdropFilter":"blur(12px)",
+          "color":         "#FFFFFF",
+          "border":        "1px solid rgba(224,92,92,0.50)",
+          "borderRadius":  "8px",
+          "padding":       "12px 28px",
+          "fontFamily":    "heading",
+          "fontWeight":    700,
+          "fontSize":      "1rem",
+          "textTransform": "uppercase",
+          "letterSpacing": "0.08em",
+          "transition":    "all 200ms ease",
+          "states": {
+            "hover":  { "background": "rgba(224,92,92,0.35)", "boxShadow": "0 0 20px rgba(224,92,92,0.40)" },
+            "focus":  { "outline": "none", "boxShadow": "0 0 0 2px rgba(224,92,92,0.60)" }
+          }
+        }
+      }
+    },
+
+    "input": {
+      "description": "Dark glass input field. Resting state is a very subtle glass surface. On focus the bottom border glows cyan and the field brightens slightly. Placeholder text is muted white.",
+      "background":       "rgba(255,255,255,0.06)",
+      "backdropFilter":   "blur(12px)",
+      "color":            "#FFFFFF",
+      "border":           "1px solid rgba(255,255,255,0.12)",
+      "borderBottom":     "2px solid rgba(255,255,255,0.20)",
+      "borderRadius":     "8px",
+      "padding":          "12px 16px",
+      "fontSize":         "1rem",
+      "fontFamily":       "body",
+      "placeholderColor": "rgba(255,255,255,0.35)",
+      "boxShadow":        "inset 0 1px 0 rgba(255,255,255,0.06)",
+      "transition":       "all 150ms ease",
+      "states": {
+        "focus": {
+          "background":    "rgba(255,255,255,0.10)",
+          "borderColor":   "rgba(255,255,255,0.20)",
+          "borderBottomColor": "#4ecdc4",
+          "boxShadow":     "0 0 0 2px rgba(78,205,196,0.20), inset 0 1px 0 rgba(255,255,255,0.08)",
+          "outline":       "none"
+        },
+        "error": {
+          "borderBottomColor": "#e05c5c",
+          "boxShadow":         "0 0 0 2px rgba(224,92,92,0.20)"
+        },
+        "disabled": {
+          "opacity": 0.40,
+          "cursor":  "not-allowed"
+        }
+      }
+    },
+
+    "card": {
+      "description": "Frosted glass panel. The inner top highlight creates the illusion of light hitting the glass surface. Shadow grounds it against the dark background. Hover lifts it with a stronger shadow.",
+      "background":    "rgba(255,255,255,0.06)",
+      "backdropFilter":"blur(12px)",
+      "border":        "1px solid rgba(255,255,255,0.12)",
+      "borderRadius":  "12px",
+      "padding":       "24px",
+      "boxShadow":     "0 8px 32px rgba(0,0,0,0.32), 0 2px 8px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.18)",
+      "transition":    "box-shadow 200ms ease, border-color 200ms ease, background 200ms ease",
+      "states": {
+        "hover": {
+          "background":   "rgba(255,255,255,0.10)",
+          "borderColor":  "rgba(255,255,255,0.22)",
+          "boxShadow":    "0 16px 48px rgba(0,0,0,0.40), 0 4px 16px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.22)"
+        }
+      }
+    },
+
+    "badge": {
+      "description": "Glass pill badges that float above the surface. Each semantic variant uses a translucent tinted background with a matching border glow. The float shadow makes them feel like physical labels.",
+      "fontSize":      "0.64rem",
+      "fontWeight":    700,
+      "letterSpacing": "0.08em",
+      "textTransform": "uppercase",
+      "borderRadius":  "9999px",
+      "padding":       "4px 10px",
+      "backdropFilter":"blur(8px)",
+      "boxShadow":     "0 2px 8px rgba(0,0,0,0.28), 0 0 0 1px rgba(255,255,255,0.10)",
+      "variants": {
+        "default": { "background": "rgba(255,255,255,0.12)", "border": "1px solid rgba(255,255,255,0.20)", "color": "rgba(255,255,255,0.80)" },
+        "brand":   { "background": "rgba(78,205,196,0.20)",  "border": "1px solid rgba(78,205,196,0.50)",  "color": "#4ecdc4" },
+        "accent":  { "background": "rgba(168,216,232,0.15)", "border": "1px solid rgba(168,216,232,0.40)", "color": "#a8d8e8" },
+        "success": { "background": "rgba(76,175,130,0.20)",  "border": "1px solid rgba(76,175,130,0.45)",  "color": "#4caf82" },
+        "warning": { "background": "rgba(240,160,64,0.20)",  "border": "1px solid rgba(240,160,64,0.45)",  "color": "#f0a040" },
+        "error":   { "background": "rgba(224,92,92,0.20)",   "border": "1px solid rgba(224,92,92,0.45)",   "color": "#e05c5c" }
+      }
+    },
+
+    "table": {
+      "description": "Glass table. The container is a glass card. Header row is slightly darker glass. Data rows are transparent by default, alternating rows get a hairline sky-blue tint. Selected rows get a cyan tint with a left border glow strip.",
+      "container": {
+        "background":    "rgba(255,255,255,0.04)",
+        "backdropFilter":"blur(12px)",
+        "border":        "1px solid rgba(255,255,255,0.10)",
+        "borderRadius":  "12px",
+        "overflow":      "hidden",
+        "boxShadow":     "0 8px 32px rgba(0,0,0,0.32)"
+      },
+      "header": {
+        "background":    "rgba(255,255,255,0.06)",
+        "fontSize":      "0.64rem",
+        "fontWeight":    700,
+        "letterSpacing": "0.08em",
+        "textTransform": "uppercase",
+        "color":         "rgba(255,255,255,0.45)",
+        "padding":       "14px 20px",
+        "borderBottom":  "1px solid rgba(255,255,255,0.10)"
+      },
+      "row": {
+        "fontSize":           "0.95rem",
+        "color":              "rgba(255,255,255,0.85)",
+        "padding":            "14px 20px",
+        "borderBottom":       "1px solid rgba(255,255,255,0.06)",
+        "transition":         "background 120ms ease",
+        "hoverBackground":    "rgba(255,255,255,0.06)",
+        "altBackground":      "rgba(168,216,232,0.03)",
+        "selectedBackground": "rgba(78,205,196,0.12)",
+        "selectedBorderLeft": "3px solid #4ecdc4",
+        "selectedBoxShadow":  "inset 3px 0 0 #4ecdc4"
+      }
+    },
+
+    "topbar": {
+      "description": "Fully transparent topbar — the page gradient shows through. A very subtle bottom border in low-opacity white separates it from the content. The logo lockup and nav links float on the gradient.",
+      "height":        "60px",
+      "background":    "rgba(255,255,255,0.04)",
+      "backdropFilter":"blur(20px)",
+      "borderBottom":  "1px solid rgba(255,255,255,0.10)",
+      "padding":       "0 32px",
+      "position":      "sticky",
+      "top":           "0",
+      "zIndex":        200,
+      "boxShadow":     "0 2px 24px rgba(0,0,0,0.20)",
+      "display":       "flex",
+      "alignItems":    "center",
+      "gap":           "32px",
+
+      "logoLockup": {
+        "display":  "flex",
+        "alignItems":"baseline",
+        "gap":      "10px",
+        "brandName": {
+          "text":          "BUFAB",
+          "fontFamily":    "heading",
+          "fontSize":      "1.1rem",
+          "fontWeight":    700,
+          "letterSpacing": "0.10em",
+          "textTransform": "uppercase",
+          "color":         "#FFFFFF"
+        },
+        "divider": {
+          "content": "|",
+          "color":   "rgba(255,255,255,0.25)",
+          "fontSize":"1rem"
+        },
+        "appName": {
+          "fontFamily":    "heading",
+          "fontSize":      "1.2rem",
+          "fontWeight":    400,
+          "letterSpacing": "0.04em",
+          "textTransform": "none",
+          "color":         "#a8d8e8"
+        }
+      },
+
+      "nav": {
+        "display":    "flex",
+        "gap":        "4px",
+        "marginLeft": "auto",
+        "item": {
+          "fontFamily":  "body",
+          "fontSize":    "0.9rem",
+          "fontWeight":  400,
+          "color":       "rgba(255,255,255,0.60)",
+          "padding":     "8px 14px",
+          "borderRadius":"8px",
+          "transition":  "all 150ms ease",
+          "states": {
+            "hover":  { "color": "#FFFFFF", "background": "rgba(255,255,255,0.08)" },
+            "active": { "color": "#4ecdc4", "fontWeight": 600, "background": "rgba(78,205,196,0.12)", "boxShadow": "0 0 12px rgba(78,205,196,0.20)" }
+          }
+        }
+      },
+
+      "rightSlot": {
+        "marginLeft": "auto",
+        "display":    "flex",
+        "alignItems": "center",
+        "gap":        "8px",
+        "iconColor":  "rgba(255,255,255,0.60)",
+        "iconHover":  "#4ecdc4"
+      },
+
+      "rules": [
+        "Topbar background is always the transparent glass layer — never solid",
+        "BUFAB brand name is always #FFFFFF weight 700",
+        "App name is always #a8d8e8 weight 400 — never bold",
+        "Active nav item text is #4ecdc4 with a subtle cyan glass background",
+        "Never put a page title inside the topbar",
+        "Main content container must include a top offset (padding or margin) equal to 'layout.topbarHeight' to prevent overlap."
+      ]
+    },
+
+    "sidebar": {
+      "description": "Frosted glass left panel. Nav items are transparent by default. Active item gets a cyan left border strip, cyan text, and a subtle cyan glass background pill.",
+      "width":        "260px",
+      "background":   "rgba(255,255,255,0.05)",
+      "backdropFilter":"blur(12px)",
+      "borderRight":  "1px solid rgba(255,255,255,0.10)",
+      "boxShadow":    "4px 0 24px rgba(0,0,0,0.20)",
+    "navItem": {
+      "padding":    "12px 24px",
+      "color":      "rgba(255,255,255,0.60)",
+      "fontSize":   "0.95rem",
+      "borderLeft": "3px solid transparent",
+      "borderRadius":"0 8px 8px 0",
+      "marginRight":"12px",
+      "transition": "all 150ms ease",
+      "states": {
+        "hover":  { "background": "rgba(255,255,255,0.08)", "color": "#FFFFFF" },
+        "active": {
+          "borderLeftColor": "#4ecdc4",
+          "background":      "rgba(78,205,196,0.12)",
+          "color":           "#4ecdc4",
+          "fontWeight":      600,
+          "boxShadow":       "inset 3px 0 0 #4ecdc4, 0 0 12px rgba(78,205,196,0.15)"
+        }
+      }
+    },
+    "sectionLabel": {
+      "fontSize":      "0.64rem",
+      "fontWeight":    700,
+      "letterSpacing": "0.10em",
+      "textTransform": "uppercase",
+      "color":         "rgba(255,255,255,0.30)",
+      "padding":       "16px 24px 8px"
+    },
+    "rules": [
+      "Sidebar must start below the topbar (top: layout.topbarHeight) to avoid overlapping header content.",
+      "Alternatively, if full-height, Topbar must have a higher z-index than Sidebar."
+    ]
+  },
+
+    "breadcrumb": {
+      "description": "Minimal breadcrumb on dark. Separator and past items are muted white. Current page is sky blue.",
+      "fontFamily":     "body",
+      "fontSize":       "0.8rem",
+      "separatorColor": "rgba(255,255,255,0.25)",
+      "separatorChar":  "›",
+      "gap":            "8px",
+      "item": {
+        "color":    "rgba(255,255,255,0.45)",
+        "transition":"color 150ms ease",
+        "states": {
+          "hover":   { "color": "rgba(255,255,255,0.80)" },
+          "current": { "color": "#a8d8e8", "fontWeight": 500, "cursor": "default" }
+        }
+      }
+    },
+
+    "tabs": {
+      "description": "Tab bar on the glass surface. Container has a bottom divider in low-opacity white. Active tab has a cyan bottom border that glows slightly.",
+      "container": {
+        "borderBottom": "1px solid rgba(255,255,255,0.10)",
+        "display":      "flex",
+        "gap":          "0"
+      },
+      "tab": {
+        "padding":      "12px 20px",
+        "fontSize":     "0.9rem",
+        "fontWeight":   400,
+        "color":        "rgba(255,255,255,0.50)",
+        "background":   "transparent",
+        "border":       "none",
+        "borderBottom": "2px solid transparent",
+        "marginBottom": "-1px",
+        "cursor":       "pointer",
+        "transition":   "all 150ms ease",
+        "states": {
+          "hover":    { "color": "rgba(255,255,255,0.80)" },
+          "active":   { "color": "#4ecdc4", "fontWeight": 600, "borderBottomColor": "#4ecdc4", "textShadow": "0 0 12px rgba(78,205,196,0.50)" },
+          "disabled": { "opacity": 0.30, "cursor": "not-allowed" }
+        }
+      }
+    },
+
+    "modal": {
+      "description": "Heavy frosted glass panel over a blurred dark overlay. The panel has a strong inner top highlight and deep shadow to distinguish it from the page glass layers.",
+      "backdrop": {
+        "background":    "rgba(10,20,25,0.70)",
+        "backdropFilter":"blur(6px)",
+        "zIndex":        300
+      },
+      "panel": {
+        "background":    "rgba(255,255,255,0.10)",
+        "backdropFilter":"blur(20px)",
+        "border":        "1px solid rgba(255,255,255,0.18)",
+        "borderRadius":  "16px",
+        "boxShadow":     "0 24px 64px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.25)",
+        "maxWidth":      "560px",
+        "width":         "90%",
+        "zIndex":        300
+      },
+      "header": {
+        "padding":      "24px 28px 16px",
+        "borderBottom": "1px solid rgba(255,255,255,0.10)",
+        "fontSize":     "1.25rem",
+        "fontFamily":   "heading",
+        "fontWeight":   700,
+        "color":        "#FFFFFF"
+      },
+      "body": {
+        "padding":    "24px 28px",
+        "fontSize":   "0.95rem",
+        "color":      "rgba(255,255,255,0.75)",
+        "lineHeight": 1.6
+      },
+      "footer": {
+        "padding":        "16px 28px 24px",
+        "borderTop":      "1px solid rgba(255,255,255,0.10)",
+        "display":        "flex",
+        "gap":            "12px",
+        "justifyContent": "flex-end"
+      },
+      "closeButton": {
+        "color":  "rgba(255,255,255,0.45)",
+        "size":   "24px",
+        "states": { "hover": { "color": "#FFFFFF" } }
+      }
+    },
+
+    "toast": {
+      "description": "Glass toast notifications. Slide in from the right with a subtle blur. Each variant has a tinted glass background and a matching left glow border.",
+      "container": {
+        "position":      "fixed",
+        "top":           "72px",
+        "right":         "24px",
+        "zIndex":        400,
+        "display":       "flex",
+        "flexDirection": "column",
+        "gap":           "10px"
+      },
+      "toast": {
+        "background":    "rgba(255,255,255,0.10)",
+        "backdropFilter":"blur(16px)",
+        "border":        "1px solid rgba(255,255,255,0.16)",
+        "borderRadius":  "10px",
+        "padding":       "14px 16px",
+        "minWidth":      "280px",
+        "maxWidth":      "380px",
+        "display":       "flex",
+        "alignItems":    "flex-start",
+        "gap":           "12px",
+        "boxShadow":     "0 8px 32px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.18)",
+        "fontSize":      "0.9rem",
+        "color":         "rgba(255,255,255,0.90)",
+        "animation":     "slideInRight 200ms ease"
+      },
+      "variants": {
+        "success": { "borderLeft": "3px solid #4caf82", "iconColor": "#4caf82", "glowColor": "rgba(76,175,130,0.20)" },
+        "warning": { "borderLeft": "3px solid #f0a040", "iconColor": "#f0a040", "glowColor": "rgba(240,160,64,0.20)" },
+        "error":   { "borderLeft": "3px solid #e05c5c", "iconColor": "#e05c5c", "glowColor": "rgba(224,92,92,0.20)" },
+        "info":    { "borderLeft": "3px solid #4ecdc4", "iconColor": "#4ecdc4", "glowColor": "rgba(78,205,196,0.20)" }
+      },
+      "autoDismiss": "4000ms"
+    },
+
+    "select": {
+      "description": "Glass dropdown. Trigger matches input styling. The open panel is a heavier glass layer floating above with a shadow. Option hover is a subtle white tint.",
+      "trigger": {
+        "background":    "rgba(255,255,255,0.06)",
+        "backdropFilter":"blur(12px)",
+        "color":         "#FFFFFF",
+        "border":        "1px solid rgba(255,255,255,0.12)",
+        "borderBottom":  "2px solid rgba(255,255,255,0.20)",
+        "borderRadius":  "8px",
+        "padding":       "12px 16px",
+        "fontSize":      "1rem",
+        "cursor":        "pointer",
+        "transition":    "all 150ms ease",
+        "states": {
+          "open":     { "borderBottomColor": "#4ecdc4", "boxShadow": "0 0 0 2px rgba(78,205,196,0.20)" },
+          "disabled": { "opacity": 0.40, "cursor": "not-allowed" }
+        }
+      },
+      "chevronColor": "rgba(255,255,255,0.45)",
+      "panel": {
+        "background":    "rgba(20,40,50,0.90)",
+        "backdropFilter":"blur(20px)",
+        "border":        "1px solid rgba(255,255,255,0.16)",
+        "borderRadius":  "8px",
+        "boxShadow":     "0 16px 48px rgba(0,0,0,0.48)",
+        "maxHeight":     "240px",
+        "overflowY":     "auto",
+        "zIndex":        100
+      },
+      "option": {
+        "padding":    "10px 16px",
+        "fontSize":   "0.95rem",
+        "color":      "rgba(255,255,255,0.80)",
+        "cursor":     "pointer",
+        "transition": "background 100ms ease",
+        "states": {
+          "hover":    { "background": "rgba(255,255,255,0.08)" },
+          "selected": { "background": "rgba(78,205,196,0.15)", "color": "#4ecdc4", "fontWeight": 500 }
+        }
+      }
+    },
+
+    "checkbox": {
+      "description": "Glass-framed checkbox. Unchecked shows a subtle white border on dark. Checked fills with a translucent cyan glass and shows a white checkmark. Focus ring is cyan.",
+      "size":         "18px",
+      "borderRadius": "4px",
+      "transition":   "all 150ms ease",
+      "label": {
+        "fontSize": "0.95rem",
+        "color":    "rgba(255,255,255,0.80)",
+        "gap":      "10px",
+        "cursor":   "pointer"
+      },
+      "states": {
+        "default":  { "background": "rgba(255,255,255,0.06)", "border": "1px solid rgba(255,255,255,0.25)" },
+        "hover":    { "border": "1px solid rgba(255,255,255,0.45)" },
+        "checked":  { "background": "rgba(78,205,196,0.30)", "border": "1px solid #4ecdc4", "checkmarkColor": "#FFFFFF", "boxShadow": "0 0 8px rgba(78,205,196,0.30)" },
+        "focus":    { "boxShadow": "0 0 0 2px rgba(78,205,196,0.60)" },
+        "disabled": { "opacity": 0.35, "cursor": "not-allowed" }
+      }
+    },
+
+    "radio": {
+      "description": "Glass radio button. Same treatment as checkbox but circular. Inner dot is white on cyan glass fill.",
+      "size":         "18px",
+      "borderRadius": "9999px",
+      "transition":   "all 150ms ease",
+      "label": {
+        "fontSize": "0.95rem",
+        "color":    "rgba(255,255,255,0.80)",
+        "gap":      "10px",
+        "cursor":   "pointer"
+      },
+      "states": {
+        "default":  { "background": "rgba(255,255,255,0.06)", "border": "1px solid rgba(255,255,255,0.25)" },
+        "hover":    { "border": "1px solid rgba(255,255,255,0.45)" },
+        "checked":  { "border": "1px solid #4ecdc4", "innerDotColor": "#4ecdc4", "innerDotSize": "8px", "boxShadow": "0 0 8px rgba(78,205,196,0.30)" },
+        "focus":    { "boxShadow": "0 0 0 2px rgba(78,205,196,0.60)" },
+        "disabled": { "opacity": 0.35, "cursor": "not-allowed" }
+      }
+    },
+
+    "toggle": {
+      "description": "Glass toggle switch. Off track is a dark glass pill. On track glows cyan with a subtle outer glow. Thumb is a bright white circle with a shadow.",
+      "track": {
+        "width":        "44px",
+        "height":       "24px",
+        "borderRadius": "9999px",
+        "transition":   "all 200ms ease",
+        "states": {
+          "off": { "background": "rgba(255,255,255,0.12)", "border": "1px solid rgba(255,255,255,0.20)" },
+          "on":  { "background": "rgba(78,205,196,0.40)", "border": "1px solid rgba(78,205,196,0.70)", "boxShadow": "0 0 12px rgba(78,205,196,0.30)" }
+        }
+      },
+      "thumb": {
+        "size":         "18px",
+        "background":   "#FFFFFF",
+        "borderRadius": "9999px",
+        "boxShadow":    "0 2px 6px rgba(0,0,0,0.40)",
+        "transition":   "transform 200ms ease",
+        "states": {
+          "off": { "transform": "translateX(3px)" },
+          "on":  { "transform": "translateX(23px)" }
+        }
+      },
+      "focus": { "boxShadow": "0 0 0 2px rgba(78,205,196,0.60)" }
+    },
+
+    "searchBar": {
+      "description": "Prominent glass search bar. On focus, the search icon turns cyan and the field brightens. The clear button appears as a ghost × on the right when text is present.",
+      "container": {
+        "display":    "flex",
+        "alignItems": "center",
+        "position":   "relative"
+      },
+      "input": {
+        "background":    "rgba(255,255,255,0.08)",
+        "backdropFilter":"blur(12px)",
+        "border":        "1px solid rgba(255,255,255,0.14)",
+        "borderBottom":  "2px solid rgba(255,255,255,0.20)",
+        "borderRadius":  "8px",
+        "padding":       "14px 16px 14px 46px",
+        "fontSize":      "1rem",
+        "color":         "#FFFFFF",
+        "fontFamily":    "body",
+        "width":         "100%",
+        "boxShadow":     "inset 0 1px 0 rgba(255,255,255,0.06)",
+        "transition":    "all 150ms ease",
+        "placeholderColor": "rgba(255,255,255,0.35)",
+        "states": {
+          "focus": {
+            "background":        "rgba(255,255,255,0.12)",
+            "borderBottomColor": "#4ecdc4",
+            "boxShadow":         "0 0 0 2px rgba(78,205,196,0.20), inset 0 1px 0 rgba(255,255,255,0.08)"
+          }
+        }
+      },
+      "icon": {
+        "position": "absolute",
+        "left":     "14px",
+        "size":     "18px",
+        "color":    "rgba(255,255,255,0.40)",
+        "states":   { "inputFocused": { "color": "#4ecdc4" } },
+        "transition":"color 150ms ease"
+      },
+      "clearButton": {
+        "position":   "absolute",
+        "right":      "14px",
+        "color":      "rgba(255,255,255,0.40)",
+        "size":       "16px",
+        "states":     { "hover": { "color": "#FFFFFF" } },
+        "showWhen":   "input has value"
+      }
+    },
+
+    "pagination": {
+      "description": "Glass pill pagination. Page buttons are ghost on dark. Active page is a cyan glass pill with a glow. Prev/Next are ghost icon buttons.",
+      "container": {
+        "display":        "flex",
+        "alignItems":     "center",
+        "gap":            "4px",
+        "justifyContent": "center"
+      },
+      "pageButton": {
+        "size":         "36px",
+        "borderRadius": "8px",
+        "fontSize":     "0.9rem",
+        "fontWeight":   500,
+        "border":       "1px solid transparent",
+        "cursor":       "pointer",
+        "transition":   "all 150ms ease",
+        "states": {
+          "default":  { "background": "transparent", "color": "rgba(255,255,255,0.50)" },
+          "hover":    { "background": "rgba(255,255,255,0.08)", "color": "#FFFFFF", "borderColor": "rgba(255,255,255,0.15)" },
+          "active":   { "background": "rgba(78,205,196,0.20)", "color": "#4ecdc4", "borderColor": "rgba(78,205,196,0.50)", "boxShadow": "0 0 12px rgba(78,205,196,0.25)" },
+          "disabled": { "opacity": 0.30, "cursor": "not-allowed" }
+        }
+      },
+      "ellipsis": { "color": "rgba(255,255,255,0.30)", "padding": "0 4px" }
+    },
+
+    "emptyState": {
+      "description": "Centered empty state on dark. Icon is a large outline in muted cyan. Heading is white. Body text is secondary white. Optional CTA is the primary button.",
+      "container": {
+        "display":        "flex",
+        "flexDirection":  "column",
+        "alignItems":     "center",
+        "justifyContent": "center",
+        "padding":        "64px 24px",
+        "textAlign":      "center"
+      },
+      "icon": {
+        "size":         "56px",
+        "color":        "rgba(78,205,196,0.40)",
+        "marginBottom": "20px"
+      },
+      "heading": {
+        "fontSize":     "1.25rem",
+        "fontFamily":   "heading",
+        "fontWeight":   700,
+        "color":        "#FFFFFF",
+        "marginBottom": "8px"
+      },
+      "body": {
+        "fontSize":     "0.95rem",
+        "color":        "rgba(255,255,255,0.50)",
+        "maxWidth":     "360px",
+        "lineHeight":   1.6,
+        "marginBottom": "28px"
+      }
+    },
+
+    "skeleton": {
+      "description": "Dark glass skeleton. Base is a very subtle white tint. Shimmer sweeps a slightly brighter white wave — visible against the dark background.",
+      "background":    "rgba(255,255,255,0.06)",
+      "borderRadius":  "6px",
+      "animation":     "shimmer 1.6s infinite linear",
+      "shimmerGradient":"linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.04) 75%)",
+      "shimmerSize":   "200% 100%",
+      "presets": {
+        "textLine":  { "height": "13px", "width": "100%", "marginBottom": "8px" },
+        "textShort": { "height": "13px", "width": "55%" },
+        "heading":   { "height": "22px", "width": "38%" },
+        "thumbnail": { "height": "80px", "width": "80px", "borderRadius": "8px" },
+        "card":      { "height": "120px", "width": "100%", "borderRadius": "12px" }
+      }
+    },
+
+    "tooltip": {
+      "description": "Dark glass tooltip. Slightly heavier blur than standard glass so it reads clearly on any background. Text is white. Arrow matches the panel.",
+      "background":    "rgba(10,20,25,0.88)",
+      "backdropFilter":"blur(16px)",
+      "border":        "1px solid rgba(255,255,255,0.16)",
+      "color":         "#FFFFFF",
+      "fontSize":      "0.78rem",
+      "padding":       "7px 12px",
+      "borderRadius":  "6px",
+      "maxWidth":      "220px",
+      "boxShadow":     "0 8px 24px rgba(0,0,0,0.40)",
+      "zIndex":        500,
+      "delay":         "300ms",
+      "transition":    "opacity 150ms ease",
+      "positions":     ["top", "bottom", "left", "right"],
+      "defaultPosition":"top"
+    },
+
+    "spinner": {
+      "description": "Circular spinner on dark. Track is a low-opacity white ring. Spinning arc is cyan with a subtle glow trailing edge.",
+      "sizes": {
+        "sm": { "size": "16px", "borderWidth": "2px", "usage": "Inside buttons" },
+        "md": { "size": "28px", "borderWidth": "3px", "usage": "Inline section loader" },
+        "lg": { "size": "48px", "borderWidth": "4px", "usage": "Full-page or panel loader" }
+      },
+      "trackColor":  "rgba(255,255,255,0.12)",
+      "spinColor":   "#4ecdc4",
+      "glowColor":   "rgba(78,205,196,0.40)",
+      "animation":   "spin 700ms linear infinite",
+      "usage":       "For AI generation use lg centered in the description panel with label 'Generating description…'"
+    },
+
+    "progressSteps": {
+      "description": "Glass stepper. Step indicators are glass pills. Active step glows cyan. Completed steps show a cyan checkmark. Connectors are low-opacity lines that fill to cyan as steps complete.",
+      "container": {
+        "display":        "flex",
+        "alignItems":     "center",
+        "justifyContent": "center"
+      },
+      "step": {
+        "indicator": {
+          "size":         "32px",
+          "borderRadius": "9999px",
+          "fontSize":     "0.8rem",
+          "fontWeight":   700,
+          "transition":   "all 200ms ease",
+          "states": {
+            "upcoming":  { "background": "rgba(255,255,255,0.08)", "color": "rgba(255,255,255,0.40)", "border": "1px solid rgba(255,255,255,0.16)" },
+            "active":    { "background": "rgba(78,205,196,0.25)", "color": "#4ecdc4", "border": "1px solid rgba(78,205,196,0.60)", "boxShadow": "0 0 16px rgba(78,205,196,0.35)" },
+            "completed": { "background": "rgba(78,205,196,0.20)", "color": "#4ecdc4", "border": "1px solid rgba(78,205,196,0.50)", "icon": "checkmark" }
+          }
+        },
+        "label": {
+          "fontSize":  "0.78rem",
+          "marginTop": "8px",
+          "states": {
+            "upcoming":  { "color": "rgba(255,255,255,0.35)" },
+            "active":    { "color": "#4ecdc4", "fontWeight": 600 },
+            "completed": { "color": "rgba(255,255,255,0.60)" }
+          }
+        }
+      },
+      "connector": {
+        "height": "1px",
+        "flex":   "1",
+        "states": {
+          "incomplete": { "background": "rgba(255,255,255,0.12)" },
+          "complete":   { "background": "rgba(78,205,196,0.50)" }
+        }
+      }
+    },
+
+    "alert": {
+      "description": "Glass alert banner. Tinted glass background matching the severity. Left border is the semantic accent color. Text is white. Icon glows in the accent color.",
+      "borderRadius": "10px",
+      "padding":      "14px 18px",
+      "display":      "flex",
+      "gap":          "12px",
+      "alignItems":   "flex-start",
+      "fontSize":     "0.9rem",
+      "lineHeight":   1.5,
+      "backdropFilter":"blur(12px)",
+      "boxShadow":    "0 4px 16px rgba(0,0,0,0.24)",
+      "variants": {
+        "success": { "background": "rgba(76,175,130,0.15)",  "border": "1px solid rgba(76,175,130,0.30)",  "borderLeft": "3px solid #4caf82", "iconColor": "#4caf82", "textColor": "rgba(255,255,255,0.90)" },
+        "warning": { "background": "rgba(240,160,64,0.15)",  "border": "1px solid rgba(240,160,64,0.30)",  "borderLeft": "3px solid #f0a040", "iconColor": "#f0a040", "textColor": "rgba(255,255,255,0.90)" },
+        "error":   { "background": "rgba(224,92,92,0.15)",   "border": "1px solid rgba(224,92,92,0.30)",   "borderLeft": "3px solid #e05c5c", "iconColor": "#e05c5c", "textColor": "rgba(255,255,255,0.90)" },
+        "info":    { "background": "rgba(78,205,196,0.12)",  "border": "1px solid rgba(78,205,196,0.28)",  "borderLeft": "3px solid #4ecdc4", "iconColor": "#4ecdc4", "textColor": "rgba(255,255,255,0.90)" }
+      },
+      "title": { "fontWeight": 700, "color": "#FFFFFF", "marginBottom": "2px" },
+      "dismissButton": { "color": "rgba(255,255,255,0.40)", "states": { "hover": { "color": "#FFFFFF" } } }
+    },
+
+    "productCard": {
+      "description": "Glass product card for catalog grid. Thumbnail area is a darker glass layer. Part number is cyan monospace. Name is white. Description is muted white. On hover the whole card lifts and the border brightens.",
+      "layout":        "flex column",
+      "background":    "rgba(255,255,255,0.06)",
+      "backdropFilter":"blur(12px)",
+      "border":        "1px solid rgba(255,255,255,0.12)",
+      "borderRadius":  "12px",
+      "overflow":      "hidden",
+      "boxShadow":     "0 8px 32px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.18)",
+      "transition":    "all 200ms ease",
+      "states": {
+        "hover": {
+          "background":  "rgba(255,255,255,0.10)",
+          "borderColor": "rgba(255,255,255,0.22)",
+          "boxShadow":   "0 16px 48px rgba(0,0,0,0.40), 0 0 0 1px rgba(78,205,196,0.20), inset 0 1px 0 rgba(255,255,255,0.22)"
+        }
+      },
+      "thumbnail": {
+        "height":         "140px",
+        "background":     "rgba(255,255,255,0.04)",
+        "borderBottom":   "1px solid rgba(255,255,255,0.08)",
+        "display":        "flex",
+        "alignItems":     "center",
+        "justifyContent": "center",
+        "iconColor":      "rgba(255,255,255,0.20)"
+      },
+      "body": { "padding": "16px" },
+      "partNumber": {
+        "fontFamily":    "mono",
+        "fontSize":      "0.72rem",
+        "fontWeight":    700,
+        "letterSpacing": "0.08em",
+        "textTransform": "uppercase",
+        "color":         "#4ecdc4",
+        "marginBottom":  "6px"
+      },
+      "name": {
+        "fontSize":     "1rem",
+        "fontFamily":   "heading",
+        "fontWeight":   700,
+        "color":        "#FFFFFF",
+        "marginBottom": "6px"
+      },
+      "description": {
+        "fontSize":     "0.82rem",
+        "color":        "rgba(255,255,255,0.55)",
+        "lineHeight":   1.5,
+        "maxLines":     2,
+        "marginBottom": "14px"
+      },
+      "footer": {
+        "display":        "flex",
+        "justifyContent": "space-between",
+        "alignItems":     "center"
+      }
+    },
+
+    "descriptionPanel": {
+      "description": "Glass output panel for AI-generated descriptions. Idle state has a dashed cyan border. Generating state pulses with a cyan glow. Ready state shows clean white text on glass.",
+      "container": {
+        "background":    "rgba(255,255,255,0.06)",
+        "backdropFilter":"blur(12px)",
+        "border":        "1px solid rgba(255,255,255,0.12)",
+        "borderRadius":  "12px",
+        "padding":       "24px",
+        "minHeight":     "200px",
+        "boxShadow":     "0 8px 32px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.18)"
+      },
+      "header": {
+        "display":        "flex",
+        "justifyContent": "space-between",
+        "alignItems":     "center",
+        "marginBottom":   "16px",
+        "fontSize":       "0.64rem",
+        "fontWeight":     700,
+        "letterSpacing":  "0.10em",
+        "textTransform":  "uppercase",
+        "color":          "rgba(255,255,255,0.40)"
+      },
+      "states": {
+        "idle": {
+          "border":    "2px dashed rgba(78,205,196,0.25)",
+          "textColor": "rgba(255,255,255,0.35)",
+          "text":      "Upload a document to generate a product description"
+        },
+        "generating": {
+          "showSpinner":       true,
+          "spinnerLabel":      "Generating description…",
+          "spinnerLabelColor": "rgba(255,255,255,0.50)",
+          "showSkeletonLines": true,
+          "skeletonLineCount": 4,
+          "borderColor":       "rgba(78,205,196,0.50)",
+          "boxShadow":         "0 8px 32px rgba(0,0,0,0.32), 0 0 0 2px rgba(78,205,196,0.25), 0 0 24px rgba(78,205,196,0.15)"
+        },
+        "ready": {
+          "textColor":  "rgba(255,255,255,0.90)",
+          "fontSize":   "0.95rem",
+          "lineHeight": 1.7,
+          "actions":    ["copy to clipboard", "save", "regenerate"]
+        }
+      },
+      "actionBar": {
+        "display":        "flex",
+        "gap":            "8px",
+        "marginTop":      "20px",
+        "justifyContent": "flex-end"
+      }
+    },
+
+    "fileUpload": {
+      "description": "Glass upload zone. Dashed border in low-opacity cyan. Background is a very subtle sky-blue glass tint. On drag-over it activates the cyan glow ring and the icon turns cyan. Upload progress bar fills from brand mid to cyan.",
+      "zone": {
+        "background":    "rgba(168,216,232,0.05)",
+        "backdropFilter":"blur(12px)",
+        "border":        "2px dashed rgba(78,205,196,0.25)",
+        "borderRadius":  "12px",
+        "padding":       "48px 24px",
+        "textAlign":     "center",
+        "cursor":        "pointer",
+        "transition":    "all 200ms ease",
+        "boxShadow":     "inset 0 1px 0 rgba(255,255,255,0.06)",
+        "states": {
+          "hover": {
+            "background":  "rgba(168,216,232,0.08)",
+            "borderColor": "rgba(78,205,196,0.50)"
+          },
+          "dragOver": {
+            "background":  "rgba(78,205,196,0.08)",
+            "borderColor": "#4ecdc4",
+            "boxShadow":   "inset 0 0 0 2px #4ecdc4, 0 0 24px rgba(78,205,196,0.30)"
+          },
+          "success": {
+            "background":  "rgba(76,175,130,0.12)",
+            "borderColor": "rgba(76,175,130,0.50)",
+            "borderStyle": "solid"
+          },
+          "error": {
+            "background":  "rgba(224,92,92,0.10)",
+            "borderColor": "rgba(224,92,92,0.50)",
+            "borderStyle": "solid"
+          }
+        }
+      },
+      "icon": {
+        "size":          "44px",
+        "color":         "rgba(168,216,232,0.50)",
+        "dragOverColor": "#4ecdc4",
+        "transition":    "color 200ms ease, filter 200ms ease",
+        "dragOverFilter":"drop-shadow(0 0 8px rgba(78,205,196,0.60))"
+      },
+      "label": {
+        "primary":   { "fontSize": "1rem",   "fontWeight": 700, "color": "rgba(255,255,255,0.85)", "text": "Drop your file here, or click to browse" },
+        "secondary": { "fontSize": "0.8rem", "color": "rgba(255,255,255,0.40)",                   "text": "Supports PDF, DOCX, XLSX — max 20 MB" }
+      },
+      "filePreview": {
+        "background":    "rgba(255,255,255,0.06)",
+        "backdropFilter":"blur(8px)",
+        "border":        "1px solid rgba(255,255,255,0.12)",
+        "borderRadius":  "8px",
+        "padding":       "10px 16px",
+        "layout":        "flex row: file icon | filename + size | remove button",
+        "filenameColor": "rgba(255,255,255,0.85)",
+        "sizeColor":     "rgba(255,255,255,0.40)",
+        "removeButton":  { "color": "rgba(224,92,92,0.70)", "states": { "hover": { "color": "#e05c5c" } } }
+      },
+      "progressBar": {
+        "height":            "3px",
+        "borderRadius":      "9999px",
+        "trackColor":        "rgba(255,255,255,0.10)",
+        "fillColor":         "#4a7d92",
+        "completedFillColor":"#4ecdc4",
+        "completedGlow":     "0 0 8px rgba(78,205,196,0.60)",
+        "transition":        "width 200ms ease"
+      },
+      "copyRules": {
+        "idle":      "Drop your file here, or click to browse",
+        "dragOver":  "Release to upload",
+        "uploading": "Uploading…",
+        "success":   "File ready — generating description",
+        "error":     "Upload failed. Please try again or choose a different file."
+      }
+    },
+
+    "chip": {
+      "description": "Glass chip / filter tag. Resting state is a subtle white glass pill. Selected state becomes a cyan glass pill with a glow border. Remove icon fades in on hover.",
+      "background":    "rgba(255,255,255,0.08)",
+      "backdropFilter":"blur(8px)",
+      "color":         "rgba(255,255,255,0.70)",
+      "border":        "1px solid rgba(255,255,255,0.14)",
+      "borderRadius":  "9999px",
+      "padding":       "4px 12px",
+      "fontSize":      "0.8rem",
+      "fontWeight":    500,
+      "display":       "inline-flex",
+      "alignItems":    "center",
+      "gap":           "6px",
+      "cursor":        "pointer",
+      "transition":    "all 150ms ease",
+      "states": {
+        "hover":    { "background": "rgba(255,255,255,0.14)", "color": "#FFFFFF", "borderColor": "rgba(255,255,255,0.25)" },
+        "selected": { "background": "rgba(78,205,196,0.20)", "color": "#4ecdc4", "borderColor": "rgba(78,205,196,0.50)", "boxShadow": "0 0 10px rgba(78,205,196,0.20)" }
+      },
+      "removeIcon": {
+        "size":   "13px",
+        "color":  "rgba(255,255,255,0.40)",
+        "states": { "hover": { "color": "#e05c5c" } }
+      }
+    }
+  },
+
+  "writingStyle": {
+    "category": "writing-style",
+    "description": "Tone and copy guidelines. Unchanged from v1 — glassmorphism is a visual theme, not a voice change.",
+    "tone": "Professional, clear, and direct. Bufab serves industrial B2B customers — avoid marketing fluff.",
+    "labels": "Short and scannable. Use sentence case for descriptions, ALL CAPS only for badges and button labels.",
+    "cta": "Action-oriented verbs: Search, Filter, Download, Generate, Add to order.",
+    "errors": "Explain what happened and what the user can do next. Never blame the user.",
+    "empty_states": "Explain why content is missing and offer a clear action to resolve it.",
+    "examples": {
+      "search_placeholder": "Search by part number, description, or category…",
+      "empty_catalog":      "No products match your search. Try adjusting your filters.",
+      "generate_button":    "GENERATE DESCRIPTION",
+      "upload_prompt":      "Drop your product datasheet here, or click to browse",
+      "upload_hint":        "Supports PDF, DOCX, XLSX — max 20 MB",
+      "upload_success":     "File ready — generating description",
+      "upload_error":       "Upload failed. Please try again or choose a different file."
+    }
+  }
+}

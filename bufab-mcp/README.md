@@ -1,14 +1,46 @@
 # bufab-mcp
 
+> **REQUIRED before first run on any machine:**
+> ```bash
+> npx -y @greadcadinho/bufab-mcp setup
+> ```
+> Registers `bufab-mcp` as an MCP server in every known agent config on this
+> machine (Cline CLI, Cline VS Code extension, Cursor, Claude Code).
+> Idempotent — safe to re-run. Skip this step and the LLM in your agent
+> will not see the Bufab design tokens, infrastructure rules, or Bicep
+> validation tools.
+
 MCP (Model Context Protocol) server that exposes:
 
 1. **`waf_guidelines`** — Azure Well-Architected Framework guidance via the official [`@azure/mcp`](https://www.npmjs.com/package/@azure/mcp) child process, plus a static Bufab overlay from `data/bufab-infrastructure-appendix.md` when present.
 2. **Infrastructure rules** — LanceDB-backed CRUD and semantic search (`rules_*`).
 3. **UI guidelines** — LanceDB-backed fragments managed via MCP tools (`ui_*`, including `ui_section_spec`, `ui_token`, `ui_export`, `ui_export_markdown`).
 4. **Architecture requirements** — versioned architecture profiles and deterministic file-change validation (`arch_*`, including `arch_validate_files` and `arch_export_markdown`).
-5. **Agent config resources** — `.claude`, `.clinerules`, `.cursor` hooks/rules, `.gitattributes`, and repo-root **`AGENTS.md`** exposed as MCP resources via server-owned `bufab-agent-config://...` URIs. **Per-repo export does not include `.cursor/mcp.json`**; register `bufab-mcp` once in the client’s **global** MCP settings.
+5. **Agent config resources** — `.claude`, `.clinerules`, `.cursor` hooks/rules, `.gitattributes`, and repo-root **`AGENTS.md`** exposed as MCP resources via server-owned `bufab-agent-config://...` URIs.
+6. **Bicep validation** — `bicep_validate` runs `bicep build` + `bicep lint` against your IaC files.
 
 Transport: **stdio** (standard MCP over stdin/stdout).
+
+## CLI
+
+```bash
+bufab-mcp                       # start the MCP server on stdio (default mode)
+bufab-mcp setup [flags]         # register in every known agent config (run once per machine)
+bufab-mcp validate <files...>   # run the UI / IaC guideline validator on one or more files
+bufab-mcp --help
+```
+
+`bufab-mcp setup` writes to (when applicable):
+
+- `<cwd>/.mcp.json` — Claude Code + Cursor (workspace-scoped)
+- `~/.cline/data/settings/cline_mcp_settings.json` — Cline CLI
+- VS Code's globalStorage path for the Cline extension (Windows / macOS / Linux variants auto-detected, only if VS Code is installed)
+- `~/.cursor/mcp.json` — Cursor user-level fallback
+
+Existing entries in those files are preserved — only the `bufab-mcp`
+key is added or refreshed. Run `bufab-mcp setup --dry-run` to preview
+without writing. See `bufab-mcp setup --help` for `--workspace-only`,
+`--skip-vscode-extension`, `--skip-cursor-user`, and `--quiet` flags.
 --
 ## Prerequisites
 
@@ -346,18 +378,18 @@ Add the same server entry as in your **global** Cursor MCP config, with absolute
 
 ```json
 {
-     "mcpServers": {
-       "bufab-mcp": {
-         "command": "node",
-         "args": ["/absolute/path/to/bufab-mcp/dist/index.js"],
-         "env": {
-           "BUFAB_UI_DB_PATH": "/absolute/path/to/bufab-mcp/.lancedb-ui",
-           "BUFAB_RULES_DB_PATH": "/absolute/path/to/bufab-mcp/.lancedb",
-           "BUFAB_ARCH_DB_PATH": "/absolute/path/to/bufab-mcp/.lancedb-arch"
-         }
-       }
-     }
-   }
+  "mcpServers": {
+    "bufab-mcp": {
+      "command": "node",
+      "args": ["/absolute/path/to/bufab-mcp/dist/index.js"],
+      "env": {
+        "BUFAB_UI_DB_PATH": "/absolute/path/to/bufab-mcp/.lancedb-ui",
+        "BUFAB_RULES_DB_PATH": "/absolute/path/to/bufab-mcp/.lancedb",
+        "BUFAB_ARCH_DB_PATH": "/absolute/path/to/bufab-mcp/.lancedb-arch"
+      }
+    }
+  }
+}
 ```
 
 Save the file — Cline picks it up automatically, no restart needed.
