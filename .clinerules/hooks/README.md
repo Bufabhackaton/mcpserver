@@ -88,7 +88,7 @@ References:
 ├── .claude/
 │   └── settings.json                ← Claude Code hook configuration
 ├── .cursor/
-│   └── hooks.json                   ← Cursor hook configuration (also: mcp.json)
+│   └── hooks.json                   ← Cursor hook configuration (MCP: global client settings, not exported)
 ├── .gitattributes                   ← forces LF on the bash shims and .mjs files
 └── bufab-mcp/
     └── scripts/

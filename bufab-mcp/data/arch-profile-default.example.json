@@ -1,0 +1,10 @@
+{
+  "language": "go",
+  "database": "sqlite",
+  "sqlite_driver": "modernc.org/sqlite",
+  "cgo_allowed": false,
+  "frontend_framework": "react",
+  "css_framework": "tailwind",
+  "deployment_targets": ["docker"],
+  "notes": "Example stack: Go API + SQLite + React + Tailwind. Replace or extend fields; see README architecture bootstrap."
+}

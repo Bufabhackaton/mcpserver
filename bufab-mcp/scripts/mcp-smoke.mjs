@@ -14,6 +14,7 @@ const server = join(root, "dist", "index.js");
 const tmp = await mkdtemp(join(tmpdir(), "bufab-mcp-smoke-"));
 await writeFile(join(tmp, ".clinerules"), "smoke-rule\n", "utf8");
 await writeFile(join(tmp, ".claude"), "smoke-claude\n", "utf8");
+await writeFile(join(tmp, "AGENTS.md"), "# smoke AGENTS\n", "utf8");
 
 const child = spawn(process.execPath, [server], {
   stdio: ["pipe", "pipe", "inherit"],
@@ -85,6 +86,12 @@ try {
   }
   const names = (tools.result?.tools ?? []).map((t) => t.name);
   console.log("tools/list OK:", names.join(", "));
+  if (!names.includes("arch_validate_requirements")) {
+    throw new Error(`missing arch_validate_requirements; got ${names.join(", ")}`);
+  }
+  if (!names.includes("arch_validate_files")) {
+    throw new Error(`missing arch_validate_files; got ${names.join(", ")}`);
+  }
 
   const templates = await request("resources/templates/list", {});
   if (templates.error) {
@@ -108,6 +115,9 @@ try {
     if (!listedUris.some((uri) => uri.endsWith("/.claude"))) {
       throw new Error(`resources/list did not include .claude: ${listedUris.join(", ")}`);
     }
+    if (!listedUris.some((uri) => uri.endsWith("AGENTS.md"))) {
+      throw new Error(`resources/list did not include AGENTS.md: ${listedUris.join(", ")}`);
+    }
     console.log("resources/list OK:", listedUris.join(", "));
 
     const setup = await request("tools/call", {
@@ -126,6 +136,18 @@ try {
     }
     if (!payload.files?.some((file) => file.path === ".claude")) {
       throw new Error(`setup_environment did not include .claude: ${text}`);
+    }
+    const agentsEntry = payload.files?.find((file) => file.path === "AGENTS.md");
+    if (!agentsEntry?.resource_uri) {
+      throw new Error(`setup_environment did not include AGENTS.md with resource_uri: ${text}`);
+    }
+    const agentsRead = await request("resources/read", { uri: agentsEntry.resource_uri });
+    if (agentsRead.error) {
+      throw new Error(JSON.stringify(agentsRead.error));
+    }
+    const agentsText = agentsRead.result?.contents?.[0]?.text;
+    if (typeof agentsText !== "string" || !agentsText.includes("smoke AGENTS")) {
+      throw new Error(`resources/read AGENTS.md unexpected: ${JSON.stringify(agentsText)}`);
     }
     const resource = await request("resources/read", { uri });
     if (resource.error) {
@@ -152,6 +174,44 @@ try {
       throw new Error(`setup_environment did not discover parent config: ${discoveredText}`);
     }
     console.log("setup_environment discovery OK:", discoveredPayload.source_dir);
+
+    const req = {
+      language: "go",
+      database: "sqlite",
+      sqlite_driver: "modernc.org/sqlite",
+      cgo_allowed: false,
+    };
+    const validateReq = await request("tools/call", {
+      name: "arch_validate_requirements",
+      arguments: { requirements: req },
+    });
+    if (validateReq.error) {
+      throw new Error(JSON.stringify(validateReq.error));
+    }
+    const validateReqText = validateReq.result?.content?.find((part) => part.type === "text")?.text;
+    const validateReqPayload = JSON.parse(validateReqText);
+    if (validateReqPayload.ok !== true) {
+      throw new Error(`arch_validate_requirements expected ok=true: ${validateReqText}`);
+    }
+
+    const validateFiles = await request("tools/call", {
+      name: "arch_validate_files",
+      arguments: {
+        requirements: req,
+        files: [
+          { path: "go.mod", content: "module example.com/app\n\ngo 1.22\n" },
+          { path: "internal/storage/db.go", content: 'package storage\n\nimport _ \"modernc.org/sqlite\"\n' },
+        ],
+      },
+    });
+    if (validateFiles.error) {
+      throw new Error(JSON.stringify(validateFiles.error));
+    }
+    const validateFilesText = validateFiles.result?.content?.find((part) => part.type === "text")?.text;
+    const validateFilesPayload = JSON.parse(validateFilesText);
+    if (!validateFilesPayload.summary || typeof validateFilesPayload.summary.filesScanned !== "number") {
+      throw new Error(`arch_validate_files returned unexpected payload: ${validateFilesText}`);
+    }
 
     // Guard against source id collisions when different absolute paths share a basename.
     const collisionRoot = await mkdtemp(join(tmpdir(), "bufab-mcp-collision-"));

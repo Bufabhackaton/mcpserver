@@ -7,8 +7,8 @@
 // Live guidelines: spawn bufab-mcp dist/index.js and call ui_export (see resolveMcpDistEntry).
 // If MCP cannot be reached, validation fails. There is no offline snapshot path.
 //
-// Detects deterministic blocker/warning violations defined by the live UI
-// guidelines export from bufab-mcp (`ui_export`).
+// Detects deterministic blocker/warning violations defined in
+// guidelines/bufab_ui_guidelines.md (Part 9 anti-patterns and Parts 3-5 rules).
 //
 // Usage:
 //   node validate.mjs <path> [<path> ...]            # validate specific files
@@ -436,7 +436,7 @@ function detectOffPaletteHex(content, file, out) {
       file,
       line: lineOf(content, m.index),
       matched: m[0],
-      message: `Color ${m[0]} is not in the Bufab token set (COLOR-03). Replace with an approved token (call ui_token / ui_export to see the live set).`,
+      message: `Color ${m[0]} is not in the Bufab token set (COLOR-03). Replace with an approved token (e.g. #1f3c46, #4ecdc4, #325c6d, #a8d8e8, #FFFFFF).`,
     });
   }
 }
