@@ -1,0 +1,31 @@
+[
+  {
+    "slug": "default",
+    "title": "Bufab default — Go API, SQLite, React, Tailwind",
+    "requirements": {
+      "language": "go",
+      "database": "sqlite",
+      "sqlite_driver": "modernc.org/sqlite",
+      "cgo_allowed": false,
+      "go_version": "1.22",
+      "frontend_framework": "react",
+      "css_framework": "tailwind",
+      "deployment_targets": ["docker", "linux_amd64"],
+      "orm": "gorm",
+      "gorm_dialector": "gorm.io/driver/sqlite",
+      "application_shape": "rest_api_with_spa",
+      "guidelines_for_agents": [
+        "Backend: Go module, HTTP API (REST), structured logging, config via env.",
+        "Data: SQLite via GORM; use gorm.io/gorm and gorm.io/driver/sqlite; prefer modernc.org/sqlite when cgo_allowed is false.",
+        "Frontend: React (SPA or embedded); styling with Tailwind CSS; keep API client in a small typed layer.",
+        "Do not introduce a second primary database or ORM without updating this profile.",
+        "After file changes, run arch_validate_files with this slug and the changed paths."
+      ],
+      "validation_hints": [
+        "go.mod present; GORM + sqlite driver imports consistent with sqlite_driver.",
+        "React and tailwind dependencies or config present when frontend files change.",
+        "No raw database/sql-only stack if orm is gorm — use GORM for persistence."
+      ]
+    }
+  }
+]

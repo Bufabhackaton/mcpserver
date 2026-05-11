@@ -276,7 +276,7 @@ export class Validator {
         file,
         line: this.lineOf(content, m.index!),
         matched: m[0],
-        message: `Color ${m[0]} is not in the Bufab token set (COLOR-03). Replace with a token from bufab_ui_guidelines.md (e.g. #1f3c46, #4ecdc4, #325c6d, #a8d8e8, #FFFFFF).`,
+        message: `Color ${m[0]} is not in the Bufab token set (COLOR-03). Replace with a token from the live bufab-mcp UI export (e.g. #1f3c46, #4ecdc4, #325c6d, #a8d8e8, #FFFFFF).`,
       });
     }
   }

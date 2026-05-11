@@ -30,10 +30,9 @@ const cases = [
   {
     name: "ui-bad.css — gradient + radius + accent misuse + web font + off-palette",
     fixture: "ui-bad.css",
-    // Multiple instances of COLOR-03 collapse to one expected entry. The
-    // TYPE-01 warning is from the @font-face's own font-family: 'CustomFont'
-    // declaration which does not include the system stack.
-    expectBlockers: ["AP-03", "AP-04", "AP-05", "AP-06", "COLOR-03", "TYPE-01"],
+    // AP-03/AP-04/AP-05/AP-06 are retired; the current bad-fixture signal is
+    // COLOR-03 plus the @font-face TYPE-01 warning.
+    expectBlockers: ["COLOR-03"],
     expectWarnings: ["TYPE-01"],
   },
   {

@@ -1,6 +1,6 @@
 {
   "name": "@greadcadinho/bufab-mcp",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": false,
   "type": "module",
   "description": "MCP server that exposes Bufab's design system (UI guidelines, tokens, section specs), infrastructure rules, and Azure Bicep validation. Includes a UI guideline validator usable via `bufab-mcp validate <file>`.",
@@ -33,6 +33,7 @@
     "scripts/install-bicep.mjs",
     "scripts/validate.mjs",
     "scripts/setup.mjs",
+    "scripts/seed-arch.mjs",
     "scripts/seed-from-guidelines.mjs",
     "scripts/seed-from-design-tokens.mjs",
     "agent-config/",
@@ -49,10 +50,12 @@
     "dev": "tsx src/index.ts",
     "postinstall": "node scripts/install-bicep.mjs",
     "verify": "node scripts/mcp-smoke.mjs",
-    "verify:ui": "node scripts/ui-seed-verify.mjs",
-    "test:validator": "node scripts/validate-test.mjs",
+    "seed:arch": "node scripts/seed-arch.mjs",
     "seed": "node scripts/seed-from-design-tokens.mjs",
     "seed:v2.1": "node scripts/seed-from-guidelines.mjs",
+    "sync:validator-hooks": "cp scripts/validate.mjs agent-config/.clinerules/hooks/lib/",
+    "verify:ui": "node scripts/ui-seed-verify.mjs",
+    "test:validator": "node scripts/validate-test.mjs",
     "prepublishOnly": "npm run build"
   },
   "engines": {
